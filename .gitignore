@@ -1,2 +1,6 @@
 *.retry
 .ansible/
+
+# Dados pessoais (username, nome completo) dos usuários adicionais do
+# computador — nunca comitados. Veja group_vars/all/local_users.yml.example.
+group_vars/all/local_users.yml

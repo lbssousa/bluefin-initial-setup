@@ -1,0 +1,12 @@
+---
+# Copie este arquivo para group_vars/all/local_users.yml (ignorado pelo
+# git) e preencha com os dados reais. Nenhuma senha é definida aqui: a
+# conta é marcada via accountsservice (PasswordMode=1, o mesmo mecanismo
+# de Configurações > Usuários > "Permitir que o usuário defina uma senha
+# no próximo login" do GNOME) para o usuário defini-la na tela do GDM no
+# primeiro login.
+extra_users:
+  - username: jsilva
+    full_name: "João da Silva"
+    groups: []          # ex.: [wheel] para acesso administrativo
+    shell: /bin/bash
