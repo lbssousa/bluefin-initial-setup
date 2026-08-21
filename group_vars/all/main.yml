@@ -47,3 +47,8 @@ printer_l4160_hostname: EPSONE0321F.local
 printer_l4160_device_uri: "ipp://{{ printer_l4160_hostname }}:631/ipp/print"
 printer_l4160_error_policy: abort-job
 printer_l4160_set_default: true
+
+# Neovim + LazyVim — configuração inicial via o starter oficial. Só é
+# clonado se ~/.config/nvim ainda não existir (nunca sobrescreve uma
+# config já presente, como a aplicada via dotfiles/stow).
+lazyvim_starter_repo: https://github.com/LazyVim/starter.git

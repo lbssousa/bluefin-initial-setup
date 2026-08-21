@@ -21,6 +21,10 @@
 #     fora de /usr em sistemas ostree. Estrutura da fila inspirada em
 #     lbssousa/nix-config. Pule com `--skip-tags printer` em máquinas
 #     sem essa impressora.
+#   - Neovim é instalado via Homebrew e, se ~/.config/nvim ainda não
+#     existir, recebe a configuração inicial do LazyVim (clone do
+#     starter oficial, sem histórico git — livre para o dotfiles/stow
+#     sobrepor plugins depois). Nunca sobrescreve uma config existente.
 #   - O driver goodix538d do libfprint é compilado e instalado via a
 #     automação do submódulo external/bluefin-distrobox-libfprint (repo
 #     separado: github.com/lbssousa/bluefin-distrobox-libfprint). Pule
@@ -243,6 +247,40 @@
             - printer_l4160_set_default
             - printer_l4160_name not in default_printer_current.stdout
 
+    # -----------------------------------------------------------------
+    # 6. Neovim + LazyVim (configuração inicial)
+    #
+    # Instala o Neovim via Homebrew e, se ~/.config/nvim ainda não
+    # existir, clona o starter oficial do LazyVim nele, removendo o
+    # histórico git do template (recomendação oficial do LazyVim — ver
+    # https://www.lazyvim.org/installation). Uma config já existente
+    # (por exemplo aplicada via dotfiles/stow) nunca é sobrescrita.
+    # -----------------------------------------------------------------
+    - name: Neovim + LazyVim
+      block:
+        - name: Instalar o Neovim via Homebrew
+          community.general.homebrew:
+            name: neovim
+            state: present
+
+        - name: Verificar se já existe configuração do Neovim
+          ansible.builtin.stat:
+            path: "{{ ansible_facts.env.HOME }}/.config/nvim"
+          register: nvim_config_dir
+
+        - name: Clonar o starter do LazyVim (configuração inicial)
+          ansible.builtin.git:
+            repo: "{{ lazyvim_starter_repo }}"
+            dest: "{{ ansible_facts.env.HOME }}/.config/nvim"
+            depth: 1
+          when: not nvim_config_dir.stat.exists
+
+        - name: Remover o histórico git do starter do LazyVim
+          ansible.builtin.file:
+            path: "{{ ansible_facts.env.HOME }}/.config/nvim/.git"
+            state: absent
+          when: not nvim_config_dir.stat.exists
+
   handlers:
     - name: reload systemd --user
       ansible.builtin.systemd:
@@ -258,7 +296,7 @@
       listen: reiniciar polkit
 
 # ---------------------------------------------------------------------
-# 6. libfprint (goodix538d) — automação de um repositório separado,
+# 7. libfprint (goodix538d) — automação de um repositório separado,
 #    trazida como submódulo git em external/bluefin-distrobox-libfprint.
 #    Compila e instala o driver via distrobox + Homebrew, sem layering.
 #    Pule com `--skip-tags libfprint` em máquinas sem esse leitor Goodix.
