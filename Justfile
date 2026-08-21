@@ -16,6 +16,14 @@ _ensure-ansible:
 _ensure-collections: _ensure-ansible
     ansible-galaxy collection install -r requirements.yml
 
+# Initialize/update git submodules (e.g. the libfprint automation).
+_ensure-submodules:
+    git submodule update --init --recursive
+
 # Run the initial setup playbook.
-setup: _ensure-collections
+setup: _ensure-collections _ensure-submodules
     ansible-playbook site.yml --ask-become-pass
+
+# Same as setup, but skips the libfprint build (for machines without that reader).
+setup-no-libfprint: _ensure-collections _ensure-submodules
+    ansible-playbook site.yml --ask-become-pass --skip-tags libfprint

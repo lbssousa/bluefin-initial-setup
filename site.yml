@@ -15,10 +15,15 @@
 #     define a própria no primeiro login via GDM (accountsservice
 #     PasswordMode=1). Dados pessoais ficam fora do git — veja
 #     group_vars/all/local_users.yml.example.
+#   - O driver goodix538d do libfprint é compilado e instalado via a
+#     automação do submódulo external/bluefin-distrobox-libfprint (repo
+#     separado: github.com/lbssousa/bluefin-distrobox-libfprint). Pule
+#     com `--skip-tags libfprint` em máquinas sem esse leitor.
 #
 # Referência para a configuração do Bitwarden: github.com/lbssousa/dotfiles
 #
 # Uso: ansible-playbook site.yml --ask-become-pass
+# (requer o submódulo git inicializado: git submodule update --init)
 - name: Setup inicial do Bluefin
   hosts: localhost
   connection: local
@@ -189,3 +194,13 @@
         state: restarted
       become: true
       listen: reiniciar polkit
+
+# ---------------------------------------------------------------------
+# 5. libfprint (goodix538d) — automação de um repositório separado,
+#    trazida como submódulo git em external/bluefin-distrobox-libfprint.
+#    Compila e instala o driver via distrobox + Homebrew, sem layering.
+#    Pule com `--skip-tags libfprint` em máquinas sem esse leitor Goodix.
+# ---------------------------------------------------------------------
+- name: libfprint (goodix538d) — github.com/lbssousa/bluefin-distrobox-libfprint
+  ansible.builtin.import_playbook: external/bluefin-distrobox-libfprint/site.yml
+  tags: [libfprint]

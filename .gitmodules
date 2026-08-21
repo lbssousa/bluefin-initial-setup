@@ -1,0 +1,3 @@
+[submodule "external/bluefin-distrobox-libfprint"]
+	path = external/bluefin-distrobox-libfprint
+	url = https://github.com/lbssousa/bluefin-distrobox-libfprint.git

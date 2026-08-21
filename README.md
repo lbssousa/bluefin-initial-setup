@@ -40,6 +40,14 @@ e arquivos de configuração graváveis (`~/.config`, `/usr/local`, `/etc`).
    de senha no primeiro login em vez do prompt normal. A marcação só é
    aplicada na criação da conta — reexecutar o playbook não reseta a
    senha de um usuário que já a definiu.
+5. **libfprint (goodix538d)** — compila e instala o driver do leitor de
+   digitais Goodix 27c6:538d, executando a automação do repositório
+   separado [lbssousa/bluefin-distrobox-libfprint](https://github.com/lbssousa/bluefin-distrobox-libfprint)
+   (trazido aqui como submódulo git em `external/`, via
+   `ansible.builtin.import_playbook`, então roda dentro do mesmo
+   `--ask-become-pass`). Em máquinas sem esse leitor, pule com
+   `ansible-playbook site.yml --ask-become-pass --skip-tags libfprint`
+   (ou `just setup-no-libfprint`).
 
 Mais automações devem ser adicionadas a este repositório com o tempo.
 
@@ -79,6 +87,9 @@ migrar para `ansible-vault`.
 - Ambiente GNOME com `accountsservice` e `busctl` (`systemd`) — ambos
   vêm por padrão no Bluefin/uBlue; necessários apenas se a automação de
   usuários adicionais for usada.
+- `distrobox` (padrão no Bluefin/uBlue) — necessário apenas para a
+  automação do libfprint; pule com `--skip-tags libfprint` se não for
+  usá-la.
 - [Homebrew](https://brew.sh) instalado em `/home/linuxbrew/.linuxbrew`
   (padrão nas imagens uBlue/Bluefin com o *homebrew module* habilitado).
 - [`just`](https://github.com/casey/just) (opcional, mas recomendado —
@@ -93,14 +104,18 @@ Homebrew automaticamente se faltar, junto da collection `community.general`
 ## Uso
 
 ```bash
-git clone https://github.com/lbssousa/bluefin-initial-setup.git
+git clone --recurse-submodules https://github.com/lbssousa/bluefin-initial-setup.git
 cd bluefin-initial-setup
 just setup
 ```
 
+(`just setup` também roda `git submodule update --init --recursive` sozinho,
+então `--recurse-submodules` no clone é só uma otimização.)
+
 Ou diretamente com Ansible:
 
 ```bash
+git submodule update --init --recursive
 ansible-galaxy collection install -r requirements.yml
 ansible-playbook site.yml --ask-become-pass
 ```
@@ -118,9 +133,13 @@ ainda não estiver no estado desejado.
 | `group_vars/all/local_users.yml` | Dados reais dos usuários adicionais — local, fora do git    |
 | `files/`                 | Arquivos estáticos copiados como estão (unidades systemd, polkit action, environment.d) |
 | `requirements.yml`       | Collections Ansible necessárias (`community.general`)           |
-| `Justfile`               | Atalho (`just setup`)                                            |
+| `external/bluefin-distrobox-libfprint` | Submódulo git com a automação do libfprint (repo separado) |
+| `.gitmodules`             | Declaração do submódulo acima                                    |
+| `Justfile`               | Atalhos (`just setup`, `just setup-no-libfprint`)                |
 
 ## Créditos
 
-Configuração do Bitwarden (agente SSH + polkit biométrico) baseada em
-[lbssousa/dotfiles](https://github.com/lbssousa/dotfiles).
+- Configuração do Bitwarden (agente SSH + polkit biométrico) baseada em
+  [lbssousa/dotfiles](https://github.com/lbssousa/dotfiles).
+- Automação do libfprint (goodix538d) do repositório separado
+  [lbssousa/bluefin-distrobox-libfprint](https://github.com/lbssousa/bluefin-distrobox-libfprint).
