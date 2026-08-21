@@ -1,306 +1,35 @@
 ---
-# Setup inicial de um desktop Bluefin/uBlue recém-instalado.
+# Setup inicial de um desktop Bluefin/uBlue recém-instalado — índice das
+# automações. Cada uma é um playbook próprio (em playbooks/, ou um
+# submódulo git em external/), importado abaixo via import_playbook, o
+# que faz todas rodarem dentro do mesmo `--ask-become-pass`.
 #
-#   - Bitwarden é instalado como Flatpak; o agente SSH dele é ligado à
-#     sessão (systemd --user, camada estática em environment.d) e o
-#     desbloqueio biométrico é habilitado via uma polkit action em
-#     /usr/local/share/polkit-1/actions/ (gravável em sistemas ostree,
-#     ao contrário de /usr).
-#   - O tap Homebrew do projeto ublue-os é adicionado e explicitamente
-#     marcado como confiável (`brew tap --custom-remote` trust), pois é
-#     dali que vêm os casks de apps GUI para desktops imutáveis.
-#   - VSCode e Zed são instalados como casks desse tap, em vez de layering
-#     via rpm-ostree.
-#   - Usuários adicionais do computador são criados sem senha; cada um
-#     define a própria no primeiro login via GDM (accountsservice
-#     PasswordMode=1). Dados pessoais ficam fora do git — veja
-#     group_vars/all/local_users.yml.example.
-#   - A impressora EPSON L4160 é configurada em modo driverless (IPP
-#     Everywhere, `lpadmin -m everywhere`) — sem instalar o driver
-#     ESC/P-R da Epson, cujo filtro CUPS não tem como ser alcançado
-#     fora de /usr em sistemas ostree. Estrutura da fila inspirada em
-#     lbssousa/nix-config. Pule com `--skip-tags printer` em máquinas
-#     sem essa impressora.
-#   - Neovim é instalado via Homebrew e, se ~/.config/nvim ainda não
-#     existir, recebe a configuração inicial do LazyVim (clone do
-#     starter oficial, sem histórico git — livre para o dotfiles/stow
-#     sobrepor plugins depois). Nunca sobrescreve uma config existente.
-#   - O driver goodix538d do libfprint é compilado e instalado via a
-#     automação do submódulo external/bluefin-distrobox-libfprint (repo
-#     separado: github.com/lbssousa/bluefin-distrobox-libfprint). Pule
-#     com `--skip-tags libfprint` em máquinas sem esse leitor.
-#
-# Referência para a configuração do Bitwarden: github.com/lbssousa/dotfiles
+# Rode só uma automação com `--tags <tag>`, ou pule uma com
+# `--skip-tags <tag>` (ex.: máquinas sem a impressora ou sem o leitor
+# biométrico). Veja o comentário de cada playbooks/*.yml para detalhes.
 #
 # Uso: ansible-playbook site.yml --ask-become-pass
 # (requer o submódulo git inicializado: git submodule update --init)
-- name: Setup inicial do Bluefin
-  hosts: localhost
-  connection: local
-  gather_facts: true
+- name: Bitwarden — Flatpak + agente SSH + polkit (desbloqueio biométrico)
+  ansible.builtin.import_playbook: playbooks/bitwarden.yml
+  tags: [bitwarden]
 
-  pre_tasks:
-    - name: Garantir que o flatpak está disponível
-      ansible.builtin.command: flatpak --version
-      register: flatpak_check
-      changed_when: false
+- name: Homebrew tap ublue-os + VSCode/Zed
+  ansible.builtin.import_playbook: playbooks/homebrew.yml
+  tags: [homebrew]
 
-    - name: Garantir que o Homebrew (linuxbrew) está disponível
-      ansible.builtin.stat:
-        path: "{{ homebrew_prefix }}/bin/brew"
-      register: brew_bin
+- name: Usuários adicionais do computador
+  ansible.builtin.import_playbook: playbooks/users.yml
+  tags: [users]
 
-    - name: Falhar com orientação se o Homebrew não for encontrado
-      ansible.builtin.fail:
-        msg: >-
-          Homebrew não encontrado em {{ homebrew_prefix }}. Nas imagens
-          uBlue/Bluefin ele já vem pré-instalado; em outras, instale-o
-          primeiro (https://brew.sh).
-      when: not brew_bin.stat.exists
+- name: Impressora EPSON L4160 (driverless)
+  ansible.builtin.import_playbook: playbooks/printer.yml
+  tags: [printer]
 
-    - name: Garantir que o CUPS (lpadmin) está disponível
-      ansible.builtin.command: which lpadmin
-      register: lpadmin_check
-      changed_when: false
-      tags: [printer]
+- name: Neovim + LazyVim
+  ansible.builtin.import_playbook: playbooks/neovim.yml
+  tags: [neovim]
 
-  tasks:
-    # -----------------------------------------------------------------
-    # 1. Bitwarden — Flatpak + agente SSH + polkit (desbloqueio biométrico)
-    # -----------------------------------------------------------------
-    - name: Bitwarden
-      block:
-        - name: Garantir que o remote Flathub está configurado
-          community.general.flatpak_remote:
-            name: flathub
-            flatpakrepo_url: https://flathub.org/repo/flathub.flatpakrepo
-            method: "{{ bitwarden_flatpak_method }}"
-            state: present
-
-        - name: Instalar o Bitwarden via Flatpak
-          community.general.flatpak:
-            name: "{{ bitwarden_flatpak_id }}"
-            remote: "{{ bitwarden_flatpak_remote }}"
-            method: "{{ bitwarden_flatpak_method }}"
-            state: present
-
-        - name: Criar ~/.config/environment.d
-          ansible.builtin.file:
-            path: "{{ ansible_facts.env.HOME }}/.config/environment.d"
-            state: directory
-            mode: "0755"
-
-        - name: Configurar SSH_AUTH_SOCK estático para IDEs e apps da sessão
-          ansible.builtin.copy:
-            src: 20-bitwarden-ssh-agent.conf
-            dest: "{{ ansible_facts.env.HOME }}/.config/environment.d/20-bitwarden-ssh-agent.conf"
-            mode: "0644"
-
-        - name: Criar ~/.config/systemd/user
-          ansible.builtin.file:
-            path: "{{ ansible_facts.env.HOME }}/.config/systemd/user"
-            state: directory
-            mode: "0755"
-
-        - name: Instalar as unidades systemd --user do agente SSH do Bitwarden
-          ansible.builtin.copy:
-            src: "{{ item }}"
-            dest: "{{ ansible_facts.env.HOME }}/.config/systemd/user/{{ item }}"
-            mode: "0644"
-          loop: "{{ bitwarden_ssh_agent_units }}"
-          notify: reload systemd --user
-
-        - name: Mascarar o gcr-ssh-agent (evita disputa por SSH_AUTH_SOCK)
-          ansible.builtin.systemd:
-            name: "{{ item }}"
-            scope: user
-            masked: true
-          loop: "{{ gcr_ssh_agent_units }}"
-
-        - name: Habilitar o path unit do agente SSH do Bitwarden
-          ansible.builtin.systemd:
-            name: bitwarden-ssh-agent.path
-            scope: user
-            daemon_reload: true
-            enabled: true
-            state: started
-
-        - name: Instalar a polkit action do Bitwarden (desbloqueio biométrico)
-          ansible.builtin.copy:
-            src: com.bitwarden.Bitwarden.policy
-            dest: "{{ bitwarden_polkit_action_dest }}"
-            owner: root
-            group: root
-            mode: "0644"
-          become: true
-          notify: reiniciar polkit
-
-    # -----------------------------------------------------------------
-    # 2. Homebrew tap do projeto ublue-os (add + trust)
-    # -----------------------------------------------------------------
-    - name: Adicionar e confiar no tap Homebrew do ublue-os
-      community.general.homebrew_tap:
-        name: "{{ ublue_homebrew_tap }}"
-        state: present
-        trust: true
-
-    # -----------------------------------------------------------------
-    # 3. Apps via Homebrew cask (tap do ublue-os)
-    # -----------------------------------------------------------------
-    - name: Instalar VSCode e Zed via Homebrew (casks do tap ublue-os)
-      community.general.homebrew_cask:
-        name: "{{ ublue_homebrew_casks }}"
-        state: present
-
-    # -----------------------------------------------------------------
-    # 4. Usuários adicionais do computador
-    #
-    # username/full_name ficam em group_vars/all/local_users.yml (fora do
-    # git — veja o .example ao lado). Nenhuma senha é definida aqui: cada
-    # conta nova é marcada com PasswordMode=1 via accountsservice, o mesmo
-    # mecanismo do GNOME Configurações > Usuários > "Permitir que o
-    # usuário defina uma senha no próximo login" — o GDM mostra a tela de
-    # definição de senha no primeiro login em vez do prompt normal.
-    # -----------------------------------------------------------------
-    - name: Usuários adicionais
-      when: extra_users is defined
-      become: true
-      block:
-        - name: Verificar quais usuários adicionais já existem
-          ansible.builtin.command: "id -u {{ item.username }}"
-          loop: "{{ extra_users }}"
-          register: extra_users_precheck
-          changed_when: false
-          failed_when: false
-
-        - name: Criar/atualizar contas dos usuários adicionais
-          ansible.builtin.user:
-            name: "{{ item.username }}"
-            comment: "{{ item.full_name }}"
-            groups: "{{ item.groups | default([]) }}"
-            append: true
-            shell: "{{ item.shell | default('/bin/bash') }}"
-            state: present
-          loop: "{{ extra_users }}"
-
-        - name: Exigir definição de senha no primeiro login (contas recém-criadas)
-          ansible.builtin.shell: |
-            set -euo pipefail
-            obj_path=$(busctl call org.freedesktop.Accounts \
-              /org/freedesktop/Accounts org.freedesktop.Accounts \
-              FindUserByName s '{{ item.item.username }}' | awk '{print $2}' | tr -d '"')
-            busctl call org.freedesktop.Accounts "$obj_path" \
-              org.freedesktop.Accounts.User SetPasswordMode i 1
-          loop: "{{ extra_users_precheck.results }}"
-          loop_control:
-            label: "{{ item.item.username }}"
-          when: item.rc != 0
-          changed_when: true
-
-    # -----------------------------------------------------------------
-    # 5. Impressora EPSON L4160 — fila CUPS driverless (IPP Everywhere)
-    #
-    # Sem instalar o driver ESC/P-R da Epson: o filtro CUPS dele não tem
-    # como ser alcançado pelo cupsd fora de /usr, que é somente leitura
-    # em sistemas ostree (ServerBin do CUPS não tem fallback de busca
-    # como o de PPDs em /usr/local/share/ppd). Em vez disso, usamos o
-    # suporte nativo do CUPS a "IPP Everywhere" (`lpadmin -m everywhere`),
-    # que dispensa qualquer driver — o cupsd consulta as capacidades da
-    # impressora via IPP na hora de imprimir.
-    #
-    # Estrutura da fila inspirada em lbssousa/nix-config
-    # (modules/system/hardware/printing.nix): URI de rede resolvida por
-    # hostname mDNS (em vez de dnssd:///implicitclass://, que podem ser
-    # instáveis) e printer-error-policy=abort-job, para que uma falha de
-    # filtro em um job não trave a fila inteira.
-    # -----------------------------------------------------------------
-    - name: Impressora EPSON L4160 (driverless)
-      become: true
-      tags: [printer]
-      block:
-        - name: Verificar a fila de impressão atual da L4160
-          ansible.builtin.command: "lpstat -v {{ printer_l4160_name }}"
-          register: l4160_current
-          changed_when: false
-          failed_when: false
-
-        - name: Configurar a fila da L4160 via IPP Everywhere (driverless)
-          ansible.builtin.command: >-
-            lpadmin -p {{ printer_l4160_name }} -E
-            -v {{ printer_l4160_device_uri }}
-            -m everywhere
-            -L "{{ printer_l4160_location }}"
-            -D "{{ printer_l4160_description }}"
-            -o printer-error-policy={{ printer_l4160_error_policy }}
-          changed_when: printer_l4160_device_uri not in l4160_current.stdout
-
-        - name: Verificar a impressora padrão atual do sistema
-          ansible.builtin.command: lpstat -d
-          register: default_printer_current
-          changed_when: false
-          failed_when: false
-
-        - name: Definir a L4160 como impressora padrão do sistema
-          ansible.builtin.command: "lpadmin -d {{ printer_l4160_name }}"
-          changed_when: true
-          when:
-            - printer_l4160_set_default
-            - printer_l4160_name not in default_printer_current.stdout
-
-    # -----------------------------------------------------------------
-    # 6. Neovim + LazyVim (configuração inicial)
-    #
-    # Instala o Neovim via Homebrew e, se ~/.config/nvim ainda não
-    # existir, clona o starter oficial do LazyVim nele, removendo o
-    # histórico git do template (recomendação oficial do LazyVim — ver
-    # https://www.lazyvim.org/installation). Uma config já existente
-    # (por exemplo aplicada via dotfiles/stow) nunca é sobrescrita.
-    # -----------------------------------------------------------------
-    - name: Neovim + LazyVim
-      block:
-        - name: Instalar o Neovim via Homebrew
-          community.general.homebrew:
-            name: neovim
-            state: present
-
-        - name: Verificar se já existe configuração do Neovim
-          ansible.builtin.stat:
-            path: "{{ ansible_facts.env.HOME }}/.config/nvim"
-          register: nvim_config_dir
-
-        - name: Clonar o starter do LazyVim (configuração inicial)
-          ansible.builtin.git:
-            repo: "{{ lazyvim_starter_repo }}"
-            dest: "{{ ansible_facts.env.HOME }}/.config/nvim"
-            depth: 1
-          when: not nvim_config_dir.stat.exists
-
-        - name: Remover o histórico git do starter do LazyVim
-          ansible.builtin.file:
-            path: "{{ ansible_facts.env.HOME }}/.config/nvim/.git"
-            state: absent
-          when: not nvim_config_dir.stat.exists
-
-  handlers:
-    - name: reload systemd --user
-      ansible.builtin.systemd:
-        daemon_reload: true
-        scope: user
-      listen: reload systemd --user
-
-    - name: reiniciar polkit
-      ansible.builtin.systemd:
-        name: polkit
-        state: restarted
-      become: true
-      listen: reiniciar polkit
-
-# ---------------------------------------------------------------------
-# 7. libfprint (goodix538d) — automação de um repositório separado,
-#    trazida como submódulo git em external/bluefin-distrobox-libfprint.
-#    Compila e instala o driver via distrobox + Homebrew, sem layering.
-#    Pule com `--skip-tags libfprint` em máquinas sem esse leitor Goodix.
-# ---------------------------------------------------------------------
 - name: libfprint (goodix538d) — github.com/lbssousa/bluefin-distrobox-libfprint
   ansible.builtin.import_playbook: external/bluefin-distrobox-libfprint/site.yml
   tags: [libfprint]

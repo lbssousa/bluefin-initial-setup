@@ -1,0 +1,49 @@
+---
+# Usuários adicionais do computador.
+#
+# username/full_name ficam em group_vars/all/local_users.yml (fora do
+# git — veja o .example ao lado). Nenhuma senha é definida aqui: cada
+# conta nova é marcada com PasswordMode=1 via accountsservice, o mesmo
+# mecanismo do GNOME Configurações > Usuários > "Permitir que o usuário
+# defina uma senha no próximo login" — o GDM mostra a tela de definição
+# de senha no primeiro login em vez do prompt normal.
+- name: Usuários adicionais do computador
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  tasks:
+    - name: Usuários adicionais
+      when: extra_users is defined
+      become: true
+      block:
+        - name: Verificar quais usuários adicionais já existem
+          ansible.builtin.command: "id -u {{ item.username }}"
+          loop: "{{ extra_users }}"
+          register: extra_users_precheck
+          changed_when: false
+          failed_when: false
+
+        - name: Criar/atualizar contas dos usuários adicionais
+          ansible.builtin.user:
+            name: "{{ item.username }}"
+            comment: "{{ item.full_name }}"
+            groups: "{{ item.groups | default([]) }}"
+            append: true
+            shell: "{{ item.shell | default('/bin/bash') }}"
+            state: present
+          loop: "{{ extra_users }}"
+
+        - name: Exigir definição de senha no primeiro login (contas recém-criadas)
+          ansible.builtin.shell: |
+            set -euo pipefail
+            obj_path=$(busctl call org.freedesktop.Accounts \
+              /org/freedesktop/Accounts org.freedesktop.Accounts \
+              FindUserByName s '{{ item.item.username }}' | awk '{print $2}' | tr -d '"')
+            busctl call org.freedesktop.Accounts "$obj_path" \
+              org.freedesktop.Accounts.User SetPasswordMode i 1
+          loop: "{{ extra_users_precheck.results }}"
+          loop_control:
+            label: "{{ item.item.username }}"
+          when: item.rc != 0
+          changed_when: true
