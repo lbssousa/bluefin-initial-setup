@@ -5,9 +5,15 @@ Automação (Ansible) para o setup inicial de um desktop Fedora Atomic
 `rpm-ostree install`** em nenhum momento — só Flatpak, Homebrew (linuxbrew)
 e arquivos de configuração graváveis (`~/.config`, `/usr/local`, `/etc`).
 
+Cada automação é um playbook próprio em `playbooks/` (ou um submódulo git
+em `external/`), importado por `site.yml` via `ansible.builtin.import_playbook`
+— todas rodam dentro do mesmo `--ask-become-pass`, mas cada uma tem sua
+própria tag: rode só uma com `--tags <tag>`, ou pule uma com
+`--skip-tags <tag>`.
+
 ## O que este playbook faz
 
-1. **Bitwarden** — instala o Flatpak (`com.bitwarden.desktop`, via Flathub)
+1. **Bitwarden** (`playbooks/bitwarden.yml`, tag `bitwarden`) — instala o Flatpak (`com.bitwarden.desktop`, via Flathub)
    e aplica a configuração de referência do
    [lbssousa/dotfiles](https://github.com/lbssousa/dotfiles):
    - **Agente SSH**: liga `SSH_AUTH_SOCK` ao socket do agente SSH do
@@ -24,13 +30,14 @@ e arquivos de configuração graváveis (`~/.config`, `/usr/local`, `/etc`).
      somente leitura em sistemas ostree. Depois de aplicado, ative em
      Bitwarden → Configurações → Segurança → *Desbloquear com autenticação
      do sistema*.
-2. **Homebrew tap `ublue-os`** — adiciona e marca como confiável
-   (`trust: true`) o tap [ublue-os/homebrew-tap](https://github.com/ublue-os/homebrew-tap),
+2. **Homebrew tap `ublue-os` + VSCode/Zed** (`playbooks/homebrew.yml`, tag
+   `homebrew`) — adiciona e marca como confiável (`trust: true`) o tap
+   [ublue-os/homebrew-tap](https://github.com/ublue-os/homebrew-tap),
    que publica casks de apps GUI empacotados especificamente para
-   desktops imutáveis (sem depender do cask oficial, que assume macOS).
-3. **VSCode e Zed** — instala `visual-studio-code-linux` e `zed-linux`
-   (casks do tap acima) via Homebrew, em vez de layering via rpm-ostree.
-4. **Usuários adicionais** — cria as contas listadas em
+   desktops imutáveis (sem depender do cask oficial, que assume macOS),
+   e instala `visual-studio-code-linux` e `zed-linux` (casks desse tap)
+   em vez de layering via rpm-ostree.
+3. **Usuários adicionais** (`playbooks/users.yml`, tag `users`) — cria as contas listadas em
    `group_vars/all/local_users.yml` (arquivo local, fora do git — veja a
    seção [Dados privados](#dados-privados-usuários-adicionais) abaixo).
    Nenhuma senha é definida: cada conta nova é marcada com
@@ -40,7 +47,7 @@ e arquivos de configuração graváveis (`~/.config`, `/usr/local`, `/etc`).
    de senha no primeiro login em vez do prompt normal. A marcação só é
    aplicada na criação da conta — reexecutar o playbook não reseta a
    senha de um usuário que já a definiu.
-5. **Impressora EPSON L4160** — cria a fila CUPS `L4160` em modo
+4. **Impressora EPSON L4160** (`playbooks/printer.yml`, tag `printer`) — cria a fila CUPS `L4160` em modo
    *driverless* (`lpadmin -m everywhere`, suporte nativo a IPP
    Everywhere), sem instalar o driver ESC/P-R da Epson: o filtro CUPS
    dele não tem como ser alcançado pelo `cupsd` fora de `/usr`
@@ -53,7 +60,7 @@ e arquivos de configuração graváveis (`~/.config`, `/usr/local`, `/etc`).
    `printer_l4160_hostname` em `group_vars/all/main.yml` se a
    impressora for trocada/renomeada na rede. Pule com
    `--skip-tags printer` em máquinas sem essa impressora.
-6. **Neovim + LazyVim** — instala o `neovim` via Homebrew e, se
+5. **Neovim + LazyVim** (`playbooks/neovim.yml`, tag `neovim`) — instala o `neovim` via Homebrew e, se
    `~/.config/nvim` ainda não existir, clona ali o
    [starter oficial do LazyVim](https://github.com/LazyVim/starter),
    removendo o histórico git do template (recomendação oficial do
@@ -61,14 +68,13 @@ e arquivos de configuração graváveis (`~/.config`, `/usr/local`, `/etc`).
    plugins depois — veja `nvim/lua/plugins/*.lua` em
    [lbssousa/dotfiles](https://github.com/lbssousa/dotfiles)). Uma
    config já existente nunca é sobrescrita.
-7. **libfprint (goodix538d)** — compila e instala o driver do leitor de
+6. **libfprint (goodix538d)** (submódulo `external/bluefin-distrobox-libfprint`, tag `libfprint`) — compila e instala o driver do leitor de
    digitais Goodix 27c6:538d, executando a automação do repositório
    separado [lbssousa/bluefin-distrobox-libfprint](https://github.com/lbssousa/bluefin-distrobox-libfprint)
-   (trazido aqui como submódulo git em `external/`, via
-   `ansible.builtin.import_playbook`, então roda dentro do mesmo
-   `--ask-become-pass`). Em máquinas sem esse leitor, pule com
-   `ansible-playbook site.yml --ask-become-pass --skip-tags libfprint`
-   (ou `just setup-no-libfprint`).
+   (trazido aqui como submódulo git, via `ansible.builtin.import_playbook`,
+   então roda dentro do mesmo `--ask-become-pass`). Em máquinas sem esse
+   leitor, pule com `ansible-playbook site.yml --ask-become-pass
+   --skip-tags libfprint` (ou `just setup-no-libfprint`).
 
 Mais automações devem ser adicionadas a este repositório com o tempo.
 
@@ -151,13 +157,18 @@ ainda não estiver no estado desejado.
 
 | Arquivo/Diretório      | Papel                                                          |
 |-------------------------|-----------------------------------------------------------------|
-| `site.yml`               | Playbook principal                                               |
-| `group_vars/all/main.yml` | Variáveis públicas (IDs de Flatpak, nome do tap, casks, caminhos) |
+| `site.yml`               | Índice: importa cada `playbooks/*.yml` com sua tag              |
+| `playbooks/bitwarden.yml` | Bitwarden — Flatpak + agente SSH + polkit (tag `bitwarden`)     |
+| `playbooks/homebrew.yml`  | Tap `ublue-os` + VSCode/Zed (tag `homebrew`)                    |
+| `playbooks/users.yml`     | Usuários adicionais (tag `users`)                                |
+| `playbooks/printer.yml`   | Impressora EPSON L4160 driverless (tag `printer`)                |
+| `playbooks/neovim.yml`    | Neovim + LazyVim (tag `neovim`)                                  |
+| `playbooks/files/`        | Arquivos estáticos copiados como estão (unidades systemd, polkit action, environment.d) — compartilhado pelos playbooks acima |
+| `group_vars/all/main.yml` | Variáveis públicas de todas as automações (IDs de Flatpak, nome do tap, casks, caminhos) |
 | `group_vars/all/local_users.yml.example` | Template dos usuários adicionais (copie para `local_users.yml`) |
 | `group_vars/all/local_users.yml` | Dados reais dos usuários adicionais — local, fora do git    |
-| `files/`                 | Arquivos estáticos copiados como estão (unidades systemd, polkit action, environment.d) |
 | `requirements.yml`       | Collections Ansible necessárias (`community.general`)           |
-| `external/bluefin-distrobox-libfprint` | Submódulo git com a automação do libfprint (repo separado) |
+| `external/bluefin-distrobox-libfprint` | Submódulo git com a automação do libfprint (repo separado, tag `libfprint`) |
 | `.gitmodules`             | Declaração do submódulo acima                                    |
 | `Justfile`               | Atalhos (`just setup`, `just setup-no-libfprint`)                |
 

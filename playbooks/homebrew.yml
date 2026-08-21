@@ -1,0 +1,33 @@
+---
+# Tap Homebrew do projeto ublue-os (add + trust) e apps GUI empacotados
+# especificamente para desktops imutáveis via cask (VSCode, Zed).
+- name: Homebrew tap ublue-os + VSCode/Zed
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  pre_tasks:
+    - name: Garantir que o Homebrew (linuxbrew) está disponível
+      ansible.builtin.stat:
+        path: "{{ homebrew_prefix }}/bin/brew"
+      register: brew_bin
+
+    - name: Falhar com orientação se o Homebrew não for encontrado
+      ansible.builtin.fail:
+        msg: >-
+          Homebrew não encontrado em {{ homebrew_prefix }}. Nas imagens
+          uBlue/Bluefin ele já vem pré-instalado; em outras, instale-o
+          primeiro (https://brew.sh).
+      when: not brew_bin.stat.exists
+
+  tasks:
+    - name: Adicionar e confiar no tap Homebrew do ublue-os
+      community.general.homebrew_tap:
+        name: "{{ ublue_homebrew_tap }}"
+        state: present
+        trust: true
+
+    - name: Instalar VSCode e Zed via Homebrew (casks do tap ublue-os)
+      community.general.homebrew_cask:
+        name: "{{ ublue_homebrew_casks }}"
+        state: present
