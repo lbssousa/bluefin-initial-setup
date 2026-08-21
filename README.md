@@ -53,7 +53,15 @@ e arquivos de configuração graváveis (`~/.config`, `/usr/local`, `/etc`).
    `printer_l4160_hostname` em `group_vars/all/main.yml` se a
    impressora for trocada/renomeada na rede. Pule com
    `--skip-tags printer` em máquinas sem essa impressora.
-6. **libfprint (goodix538d)** — compila e instala o driver do leitor de
+6. **Neovim + LazyVim** — instala o `neovim` via Homebrew e, se
+   `~/.config/nvim` ainda não existir, clona ali o
+   [starter oficial do LazyVim](https://github.com/LazyVim/starter),
+   removendo o histórico git do template (recomendação oficial do
+   LazyVim, deixa o diretório livre para o dotfiles/stow sobrepor
+   plugins depois — veja `nvim/lua/plugins/*.lua` em
+   [lbssousa/dotfiles](https://github.com/lbssousa/dotfiles)). Uma
+   config já existente nunca é sobrescrita.
+7. **libfprint (goodix538d)** — compila e instala o driver do leitor de
    digitais Goodix 27c6:538d, executando a automação do repositório
    separado [lbssousa/bluefin-distrobox-libfprint](https://github.com/lbssousa/bluefin-distrobox-libfprint)
    (trazido aqui como submódulo git em `external/`, via
