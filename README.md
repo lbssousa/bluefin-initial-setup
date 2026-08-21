@@ -30,6 +30,16 @@ e arquivos de configuração graváveis (`~/.config`, `/usr/local`, `/etc`).
    desktops imutáveis (sem depender do cask oficial, que assume macOS).
 3. **VSCode e Zed** — instala `visual-studio-code-linux` e `zed-linux`
    (casks do tap acima) via Homebrew, em vez de layering via rpm-ostree.
+4. **Usuários adicionais** — cria as contas listadas em
+   `group_vars/all/local_users.yml` (arquivo local, fora do git — veja a
+   seção [Dados privados](#dados-privados-usuários-adicionais) abaixo).
+   Nenhuma senha é definida: cada conta nova é marcada com
+   `PasswordMode=1` via `accountsservice` (o mesmo mecanismo de
+   Configurações → Usuários → *"Permitir que o usuário defina uma senha
+   no próximo login"* do GNOME), então o GDM mostra a tela de definição
+   de senha no primeiro login em vez do prompt normal. A marcação só é
+   aplicada na criação da conta — reexecutar o playbook não reseta a
+   senha de um usuário que já a definiu.
 
 Mais automações devem ser adicionadas a este repositório com o tempo.
 
@@ -41,11 +51,34 @@ Mais automações devem ser adicionadas a este repositório com o tempo.
 > rode os dois em conjunto na mesma máquina sem restaurar o `stow` depois
 > (`cd dotfiles && ./install.sh -r`).
 
+## Dados privados (usuários adicionais)
+
+`username` e nome completo são dados pessoais e não ficam neste
+repositório público. Em vez disso:
+
+```bash
+cp group_vars/all/local_users.yml.example group_vars/all/local_users.yml
+# edite group_vars/all/local_users.yml com os dados reais
+```
+
+`group_vars/all/local_users.yml` está no `.gitignore` — o git nunca vai
+tentar comitá-lo. Se a automação de usuários não for usada nesta máquina,
+basta não criar o arquivo: o bloco correspondente do playbook é pulado
+(`when: extra_users is defined`) e o restante do setup roda normalmente.
+
+Como não há senha nenhuma armazenada (nem hash), não é necessário
+`ansible-vault` aqui — só o `.gitignore` já resolve. Se uma automação
+futura precisar guardar segredos de fato (senhas, tokens), aí sim vale
+migrar para `ansible-vault`.
+
 ## Pré-requisitos
 
 - Um desktop Fedora Atomic (`rpm-ostree status` funciona), com sessão
   gráfica ativa (D-Bus/systemd de usuário rodando — necessário para as
   unidades `systemd --user` do agente SSH).
+- Ambiente GNOME com `accountsservice` e `busctl` (`systemd`) — ambos
+  vêm por padrão no Bluefin/uBlue; necessários apenas se a automação de
+  usuários adicionais for usada.
 - [Homebrew](https://brew.sh) instalado em `/home/linuxbrew/.linuxbrew`
   (padrão nas imagens uBlue/Bluefin com o *homebrew module* habilitado).
 - [`just`](https://github.com/casey/just) (opcional, mas recomendado —
@@ -80,7 +113,9 @@ ainda não estiver no estado desejado.
 | Arquivo/Diretório      | Papel                                                          |
 |-------------------------|-----------------------------------------------------------------|
 | `site.yml`               | Playbook principal                                               |
-| `group_vars/all.yml`     | Variáveis (IDs de Flatpak, nome do tap, casks, caminhos)         |
+| `group_vars/all/main.yml` | Variáveis públicas (IDs de Flatpak, nome do tap, casks, caminhos) |
+| `group_vars/all/local_users.yml.example` | Template dos usuários adicionais (copie para `local_users.yml`) |
+| `group_vars/all/local_users.yml` | Dados reais dos usuários adicionais — local, fora do git    |
 | `files/`                 | Arquivos estáticos copiados como estão (unidades systemd, polkit action, environment.d) |
 | `requirements.yml`       | Collections Ansible necessárias (`community.general`)           |
 | `Justfile`               | Atalho (`just setup`)                                            |
