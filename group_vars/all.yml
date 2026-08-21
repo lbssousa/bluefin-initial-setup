@@ -1,0 +1,35 @@
+---
+# Bitwarden (Flatpak)
+bitwarden_flatpak_id: com.bitwarden.desktop
+bitwarden_flatpak_remote: flathub
+bitwarden_flatpak_method: system
+
+# Agente SSH do Bitwarden — unidades systemd --user instaladas em
+# ~/.config/systemd/user/ e camada estática em ~/.config/environment.d/
+bitwarden_ssh_agent_units:
+  - bitwarden-ssh-agent.path
+  - bitwarden-ssh-agent-env.service
+
+# gcr-ssh-agent compete pela variável SSH_AUTH_SOCK da sessão; precisa
+# ficar mascarado para o agente do Bitwarden prevalecer.
+gcr_ssh_agent_units:
+  - gcr-ssh-agent.socket
+  - gcr-ssh-agent.service
+
+# Polkit action para desbloqueio biométrico do Bitwarden. Em sistemas
+# imutáveis (Bluefin/Bazzite/Silverblue) /usr é somente leitura; o polkitd
+# também busca actions em /usr/local/share/polkit-1/actions/ (gravável).
+bitwarden_polkit_action_dest: /usr/local/share/polkit-1/actions/com.bitwarden.Bitwarden.policy
+
+# Homebrew
+homebrew_prefix: /home/linuxbrew/.linuxbrew
+
+# Tap oficial do projeto ublue-os — fornece casks para apps que não podem
+# ir para o homebrew-core/cask por licença (VSCode, Zed, etc.), empacotados
+# para uso em desktops imutáveis.
+ublue_homebrew_tap: ublue-os/homebrew-tap
+
+# Casks instalados a partir do tap acima.
+ublue_homebrew_casks:
+  - "{{ ublue_homebrew_tap }}/visual-studio-code-linux"
+  - "{{ ublue_homebrew_tap }}/zed-linux"
