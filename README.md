@@ -40,7 +40,20 @@ e arquivos de configuração graváveis (`~/.config`, `/usr/local`, `/etc`).
    de senha no primeiro login em vez do prompt normal. A marcação só é
    aplicada na criação da conta — reexecutar o playbook não reseta a
    senha de um usuário que já a definiu.
-5. **libfprint (goodix538d)** — compila e instala o driver do leitor de
+5. **Impressora EPSON L4160** — cria a fila CUPS `L4160` em modo
+   *driverless* (`lpadmin -m everywhere`, suporte nativo a IPP
+   Everywhere), sem instalar o driver ESC/P-R da Epson: o filtro CUPS
+   dele não tem como ser alcançado pelo `cupsd` fora de `/usr`
+   (somente leitura em sistemas ostree — o `ServerBin` do CUPS não tem
+   um fallback de busca como o dos PPDs em `/usr/local/share/ppd`).
+   Estrutura da fila (URI resolvida por hostname mDNS, em vez de
+   `dnssd://`/`implicitclass://`; `printer-error-policy=abort-job`)
+   inspirada em [lbssousa/nix-config](https://github.com/lbssousa/nix-config)
+   (`modules/system/hardware/printing.nix`). Ajuste
+   `printer_l4160_hostname` em `group_vars/all/main.yml` se a
+   impressora for trocada/renomeada na rede. Pule com
+   `--skip-tags printer` em máquinas sem essa impressora.
+6. **libfprint (goodix538d)** — compila e instala o driver do leitor de
    digitais Goodix 27c6:538d, executando a automação do repositório
    separado [lbssousa/bluefin-distrobox-libfprint](https://github.com/lbssousa/bluefin-distrobox-libfprint)
    (trazido aqui como submódulo git em `external/`, via
@@ -87,6 +100,9 @@ migrar para `ansible-vault`.
 - Ambiente GNOME com `accountsservice` e `busctl` (`systemd`) — ambos
   vêm por padrão no Bluefin/uBlue; necessários apenas se a automação de
   usuários adicionais for usada.
+- CUPS (`lpadmin`, padrão no Bluefin/uBlue) e a impressora acessível na
+  rede via mDNS — necessário apenas para a automação da impressora;
+  pule com `--skip-tags printer` se não for usá-la.
 - `distrobox` (padrão no Bluefin/uBlue) — necessário apenas para a
   automação do libfprint; pule com `--skip-tags libfprint` se não for
   usá-la.
@@ -141,5 +157,7 @@ ainda não estiver no estado desejado.
 
 - Configuração do Bitwarden (agente SSH + polkit biométrico) baseada em
   [lbssousa/dotfiles](https://github.com/lbssousa/dotfiles).
+- Estrutura da fila da impressora EPSON L4160 baseada em
+  [lbssousa/nix-config](https://github.com/lbssousa/nix-config).
 - Automação do libfprint (goodix538d) do repositório separado
   [lbssousa/bluefin-distrobox-libfprint](https://github.com/lbssousa/bluefin-distrobox-libfprint).

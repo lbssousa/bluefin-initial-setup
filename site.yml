@@ -15,6 +15,12 @@
 #     define a própria no primeiro login via GDM (accountsservice
 #     PasswordMode=1). Dados pessoais ficam fora do git — veja
 #     group_vars/all/local_users.yml.example.
+#   - A impressora EPSON L4160 é configurada em modo driverless (IPP
+#     Everywhere, `lpadmin -m everywhere`) — sem instalar o driver
+#     ESC/P-R da Epson, cujo filtro CUPS não tem como ser alcançado
+#     fora de /usr em sistemas ostree. Estrutura da fila inspirada em
+#     lbssousa/nix-config. Pule com `--skip-tags printer` em máquinas
+#     sem essa impressora.
 #   - O driver goodix538d do libfprint é compilado e instalado via a
 #     automação do submódulo external/bluefin-distrobox-libfprint (repo
 #     separado: github.com/lbssousa/bluefin-distrobox-libfprint). Pule
@@ -47,6 +53,12 @@
           uBlue/Bluefin ele já vem pré-instalado; em outras, instale-o
           primeiro (https://brew.sh).
       when: not brew_bin.stat.exists
+
+    - name: Garantir que o CUPS (lpadmin) está disponível
+      ansible.builtin.command: which lpadmin
+      register: lpadmin_check
+      changed_when: false
+      tags: [printer]
 
   tasks:
     # -----------------------------------------------------------------
@@ -181,6 +193,56 @@
           when: item.rc != 0
           changed_when: true
 
+    # -----------------------------------------------------------------
+    # 5. Impressora EPSON L4160 — fila CUPS driverless (IPP Everywhere)
+    #
+    # Sem instalar o driver ESC/P-R da Epson: o filtro CUPS dele não tem
+    # como ser alcançado pelo cupsd fora de /usr, que é somente leitura
+    # em sistemas ostree (ServerBin do CUPS não tem fallback de busca
+    # como o de PPDs em /usr/local/share/ppd). Em vez disso, usamos o
+    # suporte nativo do CUPS a "IPP Everywhere" (`lpadmin -m everywhere`),
+    # que dispensa qualquer driver — o cupsd consulta as capacidades da
+    # impressora via IPP na hora de imprimir.
+    #
+    # Estrutura da fila inspirada em lbssousa/nix-config
+    # (modules/system/hardware/printing.nix): URI de rede resolvida por
+    # hostname mDNS (em vez de dnssd:///implicitclass://, que podem ser
+    # instáveis) e printer-error-policy=abort-job, para que uma falha de
+    # filtro em um job não trave a fila inteira.
+    # -----------------------------------------------------------------
+    - name: Impressora EPSON L4160 (driverless)
+      become: true
+      tags: [printer]
+      block:
+        - name: Verificar a fila de impressão atual da L4160
+          ansible.builtin.command: "lpstat -v {{ printer_l4160_name }}"
+          register: l4160_current
+          changed_when: false
+          failed_when: false
+
+        - name: Configurar a fila da L4160 via IPP Everywhere (driverless)
+          ansible.builtin.command: >-
+            lpadmin -p {{ printer_l4160_name }} -E
+            -v {{ printer_l4160_device_uri }}
+            -m everywhere
+            -L "{{ printer_l4160_location }}"
+            -D "{{ printer_l4160_description }}"
+            -o printer-error-policy={{ printer_l4160_error_policy }}
+          changed_when: printer_l4160_device_uri not in l4160_current.stdout
+
+        - name: Verificar a impressora padrão atual do sistema
+          ansible.builtin.command: lpstat -d
+          register: default_printer_current
+          changed_when: false
+          failed_when: false
+
+        - name: Definir a L4160 como impressora padrão do sistema
+          ansible.builtin.command: "lpadmin -d {{ printer_l4160_name }}"
+          changed_when: true
+          when:
+            - printer_l4160_set_default
+            - printer_l4160_name not in default_printer_current.stdout
+
   handlers:
     - name: reload systemd --user
       ansible.builtin.systemd:
@@ -196,7 +258,7 @@
       listen: reiniciar polkit
 
 # ---------------------------------------------------------------------
-# 5. libfprint (goodix538d) — automação de um repositório separado,
+# 6. libfprint (goodix538d) — automação de um repositório separado,
 #    trazida como submódulo git em external/bluefin-distrobox-libfprint.
 #    Compila e instala o driver via distrobox + Homebrew, sem layering.
 #    Pule com `--skip-tags libfprint` em máquinas sem esse leitor Goodix.

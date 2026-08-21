@@ -33,3 +33,17 @@ ublue_homebrew_tap: ublue-os/homebrew-tap
 ublue_homebrew_casks:
   - "{{ ublue_homebrew_tap }}/visual-studio-code-linux"
   - "{{ ublue_homebrew_tap }}/zed-linux"
+
+# Impressora EPSON L4160 — fila CUPS driverless (IPP Everywhere), sem
+# instalar o driver ESC/P-R da Epson. printer_l4160_hostname é o mesmo
+# hostname mDNS usado em lbssousa/nix-config
+# (modules/system/hardware/printing.nix, deviceUri socket://); confirme
+# com `avahi-resolve --name EPSONE0321F.local` ou `lpinfo -v` se a
+# impressora tiver sido trocada/renomeada na rede.
+printer_l4160_name: L4160
+printer_l4160_location: "Wi-Fi"
+printer_l4160_description: "EPSON L4160 Series"
+printer_l4160_hostname: EPSONE0321F.local
+printer_l4160_device_uri: "ipp://{{ printer_l4160_hostname }}:631/ipp/print"
+printer_l4160_error_policy: abort-job
+printer_l4160_set_default: true
