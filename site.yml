@@ -1,0 +1,142 @@
+---
+# Setup inicial de um desktop Bluefin/uBlue recém-instalado.
+#
+#   - Bitwarden é instalado como Flatpak; o agente SSH dele é ligado à
+#     sessão (systemd --user, camada estática em environment.d) e o
+#     desbloqueio biométrico é habilitado via uma polkit action em
+#     /usr/local/share/polkit-1/actions/ (gravável em sistemas ostree,
+#     ao contrário de /usr).
+#   - O tap Homebrew do projeto ublue-os é adicionado e explicitamente
+#     marcado como confiável (`brew tap --custom-remote` trust), pois é
+#     dali que vêm os casks de apps GUI para desktops imutáveis.
+#   - VSCode e Zed são instalados como casks desse tap, em vez de layering
+#     via rpm-ostree.
+#
+# Referência para a configuração do Bitwarden: github.com/lbssousa/dotfiles
+#
+# Uso: ansible-playbook site.yml --ask-become-pass
+- name: Setup inicial do Bluefin
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  pre_tasks:
+    - name: Garantir que o flatpak está disponível
+      ansible.builtin.command: flatpak --version
+      register: flatpak_check
+      changed_when: false
+
+    - name: Garantir que o Homebrew (linuxbrew) está disponível
+      ansible.builtin.stat:
+        path: "{{ homebrew_prefix }}/bin/brew"
+      register: brew_bin
+
+    - name: Falhar com orientação se o Homebrew não for encontrado
+      ansible.builtin.fail:
+        msg: >-
+          Homebrew não encontrado em {{ homebrew_prefix }}. Nas imagens
+          uBlue/Bluefin ele já vem pré-instalado; em outras, instale-o
+          primeiro (https://brew.sh).
+      when: not brew_bin.stat.exists
+
+  tasks:
+    # -----------------------------------------------------------------
+    # 1. Bitwarden — Flatpak + agente SSH + polkit (desbloqueio biométrico)
+    # -----------------------------------------------------------------
+    - name: Bitwarden
+      block:
+        - name: Garantir que o remote Flathub está configurado
+          community.general.flatpak_remote:
+            name: flathub
+            flatpakrepo_url: https://flathub.org/repo/flathub.flatpakrepo
+            method: "{{ bitwarden_flatpak_method }}"
+            state: present
+
+        - name: Instalar o Bitwarden via Flatpak
+          community.general.flatpak:
+            name: "{{ bitwarden_flatpak_id }}"
+            remote: "{{ bitwarden_flatpak_remote }}"
+            method: "{{ bitwarden_flatpak_method }}"
+            state: present
+
+        - name: Criar ~/.config/environment.d
+          ansible.builtin.file:
+            path: "{{ ansible_env.HOME }}/.config/environment.d"
+            state: directory
+            mode: "0755"
+
+        - name: Configurar SSH_AUTH_SOCK estático para IDEs e apps da sessão
+          ansible.builtin.copy:
+            src: 20-bitwarden-ssh-agent.conf
+            dest: "{{ ansible_env.HOME }}/.config/environment.d/20-bitwarden-ssh-agent.conf"
+            mode: "0644"
+
+        - name: Criar ~/.config/systemd/user
+          ansible.builtin.file:
+            path: "{{ ansible_env.HOME }}/.config/systemd/user"
+            state: directory
+            mode: "0755"
+
+        - name: Instalar as unidades systemd --user do agente SSH do Bitwarden
+          ansible.builtin.copy:
+            src: "{{ item }}"
+            dest: "{{ ansible_env.HOME }}/.config/systemd/user/{{ item }}"
+            mode: "0644"
+          loop: "{{ bitwarden_ssh_agent_units }}"
+          notify: reload systemd --user
+
+        - name: Mascarar o gcr-ssh-agent (evita disputa por SSH_AUTH_SOCK)
+          ansible.builtin.systemd:
+            name: "{{ item }}"
+            scope: user
+            masked: true
+          loop: "{{ gcr_ssh_agent_units }}"
+
+        - name: Habilitar o path unit do agente SSH do Bitwarden
+          ansible.builtin.systemd:
+            name: bitwarden-ssh-agent.path
+            scope: user
+            daemon_reload: true
+            enabled: true
+            state: started
+
+        - name: Instalar a polkit action do Bitwarden (desbloqueio biométrico)
+          ansible.builtin.copy:
+            src: com.bitwarden.Bitwarden.policy
+            dest: "{{ bitwarden_polkit_action_dest }}"
+            owner: root
+            group: root
+            mode: "0644"
+          become: true
+          notify: reiniciar polkit
+
+    # -----------------------------------------------------------------
+    # 2. Homebrew tap do projeto ublue-os (add + trust)
+    # -----------------------------------------------------------------
+    - name: Adicionar e confiar no tap Homebrew do ublue-os
+      community.general.homebrew_tap:
+        name: "{{ ublue_homebrew_tap }}"
+        state: present
+        trust: true
+
+    # -----------------------------------------------------------------
+    # 3. Apps via Homebrew cask (tap do ublue-os)
+    # -----------------------------------------------------------------
+    - name: Instalar VSCode e Zed via Homebrew (casks do tap ublue-os)
+      community.general.homebrew_cask:
+        name: "{{ ublue_homebrew_casks }}"
+        state: present
+
+  handlers:
+    - name: reload systemd --user
+      ansible.builtin.systemd:
+        daemon_reload: true
+        scope: user
+      listen: reload systemd --user
+
+    - name: reiniciar polkit
+      ansible.builtin.systemd:
+        name: polkit
+        state: restarted
+      become: true
+      listen: reiniciar polkit
