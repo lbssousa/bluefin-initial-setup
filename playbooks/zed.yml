@@ -1,0 +1,55 @@
+---
+# Zed — Podman como runtime de dev containers (zed.dev/docs/dev-containers).
+#
+# Sem "use_podman": true em settings.json, o Zed tenta usar o Docker por
+# padrão; nas imagens uBlue/Bluefin só o Podman vem pré-instalado.
+# Configuração de referência: github.com/lbssousa/dotfiles (pacote stow
+# "zed", que gerencia ~/.config/zed/settings.json via symlink).
+#
+# Se ~/.config/zed/settings.json já existir — seja porque o dotfiles/stow
+# já foi aplicado, seja porque foi editado manualmente — nunca é
+# sobrescrito (mesmo raciocínio do playbooks/neovim.yml): esse arquivo
+# tende a acumular preferências pessoais (tema, fonte, keybindings) ao
+# longo do tempo, então esta automação cobre só o bootstrap de uma
+# máquina nova, sem o dotfiles ainda aplicado.
+- name: Zed — Podman como runtime de dev containers
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  pre_tasks:
+    - name: Garantir que o Podman está disponível
+      ansible.builtin.command: which podman
+      register: podman_check
+      changed_when: false
+      failed_when: false
+
+    - name: Falhar com orientação se o Podman não for encontrado
+      ansible.builtin.fail:
+        msg: >-
+          Podman não encontrado no PATH. Nas imagens uBlue/Bluefin ele já
+          vem pré-instalado; em outras, instale-o antes de usar dev
+          containers no Zed (https://podman.io).
+      when: podman_check.rc != 0
+
+  tasks:
+    - name: Zed — Podman como runtime de dev containers
+      block:
+        - name: Verificar se já existe configuração do Zed
+          ansible.builtin.stat:
+            path: "{{ ansible_facts.env.HOME }}/.config/zed/settings.json"
+          register: zed_settings
+
+        - name: Garantir que ~/.config/zed existe
+          ansible.builtin.file:
+            path: "{{ ansible_facts.env.HOME }}/.config/zed"
+            state: directory
+            mode: "0755"
+          when: not zed_settings.stat.exists
+
+        - name: Configurar o Podman como runtime de dev containers do Zed
+          ansible.builtin.copy:
+            src: zed-settings.json
+            dest: "{{ ansible_facts.env.HOME }}/.config/zed/settings.json"
+            mode: "0644"
+          when: not zed_settings.stat.exists

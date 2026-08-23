@@ -37,7 +37,17 @@ própria tag: rode só uma com `--tags <tag>`, ou pule uma com
    desktops imutáveis (sem depender do cask oficial, que assume macOS),
    e instala `visual-studio-code-linux` e `zed-linux` (casks desse tap)
    em vez de layering via rpm-ostree.
-3. **Usuários adicionais** (`playbooks/users.yml`, tag `users`) — cria as contas listadas em
+3. **Zed — Podman como runtime de dev containers** (`playbooks/zed.yml`, tag
+   `zed`) — configura `"use_podman": true` em `~/.config/zed/settings.json`
+   ([zed.dev/docs/dev-containers](https://zed.dev/docs/dev-containers)),
+   já que nas imagens uBlue/Bluefin só o Podman vem pré-instalado (sem
+   Docker). Configuração de referência (pacote stow `zed`) em
+   [lbssousa/dotfiles](https://github.com/lbssousa/dotfiles). Mesmo
+   raciocínio do Neovim abaixo: se o arquivo já existir — por
+   dotfiles/stow ou edição manual —, nunca é sobrescrito, já que tende a
+   acumular preferências pessoais (tema, fonte, keybindings) ao longo do
+   tempo.
+4. **Usuários adicionais** (`playbooks/users.yml`, tag `users`) — cria as contas listadas em
    `group_vars/all/local_users.yml` (arquivo local, fora do git — veja a
    seção [Dados privados](#dados-privados-usuários-adicionais) abaixo).
    Nenhuma senha é definida: cada conta nova é marcada com
@@ -47,7 +57,7 @@ própria tag: rode só uma com `--tags <tag>`, ou pule uma com
    de senha no primeiro login em vez do prompt normal. A marcação só é
    aplicada na criação da conta — reexecutar o playbook não reseta a
    senha de um usuário que já a definiu.
-4. **Impressora EPSON L4160** (`playbooks/printer.yml`, tag `printer`) — cria a fila CUPS `L4160` em modo
+5. **Impressora EPSON L4160** (`playbooks/printer.yml`, tag `printer`) — cria a fila CUPS `L4160` em modo
    *driverless* (`lpadmin -m everywhere`, suporte nativo a IPP
    Everywhere), sem instalar o driver ESC/P-R da Epson: o filtro CUPS
    dele não tem como ser alcançado pelo `cupsd` fora de `/usr`
@@ -60,7 +70,7 @@ própria tag: rode só uma com `--tags <tag>`, ou pule uma com
    `printer_l4160_hostname` em `group_vars/all/main.yml` se a
    impressora for trocada/renomeada na rede. Pule com
    `--skip-tags printer` em máquinas sem essa impressora.
-5. **Neovim + LazyVim** (`playbooks/neovim.yml`, tag `neovim`) — instala o `neovim` via Homebrew e, se
+6. **Neovim + LazyVim** (`playbooks/neovim.yml`, tag `neovim`) — instala o `neovim` via Homebrew e, se
    `~/.config/nvim` ainda não existir, clona ali o
    [starter oficial do LazyVim](https://github.com/LazyVim/starter),
    removendo o histórico git do template (recomendação oficial do
@@ -68,7 +78,7 @@ própria tag: rode só uma com `--tags <tag>`, ou pule uma com
    plugins depois — veja `nvim/lua/plugins/*.lua` em
    [lbssousa/dotfiles](https://github.com/lbssousa/dotfiles)). Uma
    config já existente nunca é sobrescrita.
-6. **libfprint (goodix538d)** (submódulo `external/bluefin-distrobox-libfprint`, tag `libfprint`) — compila e instala o driver do leitor de
+7. **libfprint (goodix538d)** (submódulo `external/bluefin-distrobox-libfprint`, tag `libfprint`) — compila e instala o driver do leitor de
    digitais Goodix 27c6:538d, executando a automação do repositório
    separado [lbssousa/bluefin-distrobox-libfprint](https://github.com/lbssousa/bluefin-distrobox-libfprint)
    (trazido aqui como submódulo git, via `ansible.builtin.import_playbook`,
@@ -160,6 +170,7 @@ ainda não estiver no estado desejado.
 | `site.yml`               | Índice: importa cada `playbooks/*.yml` com sua tag              |
 | `playbooks/bitwarden.yml` | Bitwarden — Flatpak + agente SSH + polkit (tag `bitwarden`)     |
 | `playbooks/homebrew.yml`  | Tap `ublue-os` + VSCode/Zed (tag `homebrew`)                    |
+| `playbooks/zed.yml`       | Podman como runtime de dev containers no Zed (tag `zed`)         |
 | `playbooks/users.yml`     | Usuários adicionais (tag `users`)                                |
 | `playbooks/printer.yml`   | Impressora EPSON L4160 driverless (tag `printer`)                |
 | `playbooks/neovim.yml`    | Neovim + LazyVim (tag `neovim`)                                  |
