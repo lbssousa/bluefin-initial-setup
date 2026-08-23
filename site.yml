@@ -18,6 +18,10 @@
   ansible.builtin.import_playbook: playbooks/homebrew.yml
   tags: [homebrew]
 
+- name: Zed — Podman como runtime de dev containers
+  ansible.builtin.import_playbook: playbooks/zed.yml
+  tags: [zed]
+
 - name: Usuários adicionais do computador
   ansible.builtin.import_playbook: playbooks/users.yml
   tags: [users]
