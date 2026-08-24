@@ -1,0 +1,247 @@
+---
+# YubiKey FIDO2/U2F — cada etapa é selecionável via tag (--tags
+# yubikey-<etapa>), migrada das receitas just yubikey-* do repo
+# lbssousa/dotfiles (fluxo atual, baseado em authselect — não do
+# security/yubikey/setup.sh legado, que editava /etc/pam.d/system-auth
+# via sed e desativava o authselect).
+#
+# A instalação do pacote pam-u2f fica FORA do escopo desta automação:
+# o feature nativo "with-pam-u2f" do authselect espera o pam_u2f.so no
+# caminho padrão do sistema, só alcançável via rpm-ostree install — o
+# que violaria a regra deste repositório de nunca usar rpm-ostree
+# (veja o README). Instale antes, manualmente:
+#   just yubikey-install   (no dotfiles)
+# ou diretamente:
+#   sudo rpm-ostree install --idempotent pam-u2f
+#   brew install libfido2
+# seguido de reinicialização.
+- name: YubiKey FIDO2/U2F
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  pre_tasks:
+    - name: Verificar se o pacote pam-u2f está instalado
+      ansible.builtin.command: rpm -q pam-u2f
+      register: pam_u2f_check
+      changed_when: false
+      failed_when: false
+      tags: [yubikey-enroll, yubikey-setup-pam, yubikey-mode-replace, yubikey-mode-2fa, yubikey-test]
+
+    - name: Verificar se o pamu2fcfg está disponível
+      ansible.builtin.command: which pamu2fcfg
+      register: pamu2fcfg_check
+      changed_when: false
+      failed_when: false
+      tags: [yubikey-enroll, yubikey-setup-pam, yubikey-mode-replace, yubikey-mode-2fa, yubikey-test]
+
+    - name: Falhar com orientação se o pam-u2f não estiver instalado
+      ansible.builtin.fail:
+        msg: >-
+          pam-u2f (ou o binário pamu2fcfg) não encontrado. A instalação
+          do pacote é manual e fica fora desta automação (evita
+          rpm-ostree install — veja o cabeçalho de
+          playbooks/yubikey.yml). Rode antes: `just yubikey-install` no
+          dotfiles, ou `sudo rpm-ostree install --idempotent pam-u2f
+          && brew install libfido2` seguido de reinicialização.
+      when: >-
+        pam_u2f_check.rc | default(1) != 0 or
+        pamu2fcfg_check.rc | default(1) != 0
+      tags: [yubikey-enroll, yubikey-setup-pam, yubikey-mode-replace, yubikey-mode-2fa, yubikey-test]
+
+  tasks:
+    # ── Registro da primeira YubiKey ──────────────────────────────────
+    - name: Registro da YubiKey
+      tags: [yubikey-enroll]
+      block:
+        - name: Verificar se já existe arquivo de chaves U2F
+          ansible.builtin.stat:
+            path: "{{ ansible_facts.env.HOME }}/.config/Yubico/u2f_keys"
+          register: yubikey_keys_stat
+
+        - name: Pedir para inserir a YubiKey
+          ansible.builtin.pause:
+            prompt: "Insira sua YubiKey na porta USB e pressione Enter para continuar"
+          when: not yubikey_keys_stat.stat.exists
+
+        - name: Garantir que ~/.config/Yubico existe
+          ansible.builtin.file:
+            path: "{{ ansible_facts.env.HOME }}/.config/Yubico"
+            state: directory
+            mode: "0755"
+          when: not yubikey_keys_stat.stat.exists
+
+        - name: Registrar a YubiKey (toque a chave quando o LED piscar)
+          ansible.builtin.shell: "umask 077; pamu2fcfg > {{ ansible_facts.env.HOME }}/.config/Yubico/u2f_keys"
+          when: not yubikey_keys_stat.stat.exists
+          changed_when: true
+
+        - name: Gravar o origin do enrollment (hostname atual)
+          ansible.builtin.copy:
+            content: "pam://{{ ansible_facts.hostname }}\n"
+            dest: "{{ ansible_facts.env.HOME }}/.config/Yubico/u2f_origin"
+            mode: "0644"
+          when: not yubikey_keys_stat.stat.exists
+
+    # ── PAM via authselect (YubiKey substitui a senha) ────────────────
+    # yubikey-setup-pam e yubikey-mode-replace aplicam exatamente o
+    # mesmo perfil authselect (local + features base + with-pam-u2f) —
+    # mesma ação do just, só com nomes diferentes por conveniência de
+    # uso; aqui viram a mesma tarefa com as duas tags.
+    - name: PAM via authselect — YubiKey substitui a senha
+      tags: [yubikey-setup-pam, yubikey-mode-replace]
+      become: true
+      block:
+        - name: Verificar perfil authselect atual
+          ansible.builtin.command: authselect current --raw
+          register: authselect_current
+          changed_when: false
+          failed_when: false
+
+        - name: Aplicar perfil authselect (YubiKey substitui a senha)
+          ansible.builtin.command: >-
+            authselect select local
+            {{ (yubikey_authselect_base_features + ['with-pam-u2f']) | join(' ') }}
+            --force --backup=yubikey-{{ ansible_date_time.iso8601_basic_short }}
+          when: >-
+            authselect_current.rc != 0 or
+            authselect_current.stdout_lines[0] | default('') != 'local' or
+            (authselect_current.stdout_lines[1:] | sort) !=
+              ((yubikey_authselect_base_features + ['with-pam-u2f']) | sort)
+          changed_when: true
+
+    # ── pcscd — corrige race condition com udev no boot ───────────────
+    - name: pcscd — aguardar udev settle no boot (YubiKey + GPG)
+      tags: [yubikey-setup-pcscd]
+      become: true
+      block:
+        - name: Garantir que o diretório do drop-in do pcscd existe
+          ansible.builtin.file:
+            path: "{{ yubikey_pcscd_dropin | dirname }}"
+            state: directory
+            mode: "0755"
+
+        - name: Instalar o drop-in do pcscd
+          ansible.builtin.copy:
+            content: |
+              [Service]
+              ExecStartPre=/usr/bin/udevadm settle --timeout=5
+            dest: "{{ yubikey_pcscd_dropin }}"
+            mode: "0644"
+          notify:
+            - reload systemd
+            - restart pcscd
+
+    # ── Modo 2FA (YubiKey + senha obrigatórios) ───────────────────────
+    - name: PAM via authselect — modo 2FA (YubiKey + senha)
+      tags: [yubikey-mode-2fa]
+      become: true
+      block:
+        - name: Confirmar ativação do modo 2FA
+          ansible.builtin.pause:
+            prompt: "Ativar modo 2FA (YubiKey + senha obrigatórios)? Digite 'sim' para continuar"
+          register: yubikey_2fa_confirm
+
+        - name: Verificar perfil authselect atual
+          ansible.builtin.command: authselect current --raw
+          register: authselect_current_2fa
+          changed_when: false
+          failed_when: false
+          when: yubikey_2fa_confirm.user_input | default('') | lower == 'sim'
+
+        - name: Aplicar perfil authselect (modo 2FA)
+          ansible.builtin.command: >-
+            authselect select local
+            {{ (yubikey_authselect_base_features + ['with-pam-u2f-2fa']) | join(' ') }}
+            --force --backup=yubikey-{{ ansible_date_time.iso8601_basic_short }}
+          when: >-
+            yubikey_2fa_confirm.user_input | default('') | lower == 'sim' and
+            (authselect_current_2fa.rc != 0 or
+             authselect_current_2fa.stdout_lines[0] | default('') != 'local' or
+             (authselect_current_2fa.stdout_lines[1:] | sort) !=
+               ((yubikey_authselect_base_features + ['with-pam-u2f-2fa']) | sort))
+          changed_when: true
+
+    # ── Teste de autenticação ──────────────────────────────────────────
+    - name: Testar autenticação via sudo com a YubiKey
+      tags: [yubikey-test]
+      block:
+        - name: Limpar cache de credenciais do sudo
+          ansible.builtin.command: sudo -k
+          changed_when: false
+
+        - name: Autenticar via sudo (toque a YubiKey quando solicitado)
+          ansible.builtin.command:
+            argv:
+              - sudo
+              - "--prompt=[YubiKey] Aguardando toque na chave (ou senha): "
+              - "true"
+          changed_when: false
+          failed_when: false
+          register: yubikey_test_result
+
+        - name: Reportar resultado do teste
+          ansible.builtin.debug:
+            msg: "Autenticação bem-sucedida!"
+          when: yubikey_test_result.rc == 0
+
+        - name: Reportar falha do teste
+          ansible.builtin.debug:
+            msg: >-
+              Autenticação falhou. Verifique: YubiKey conectada (ykman
+              list), chaves registradas
+              (~/.config/Yubico/u2f_keys) e o PAM (authselect current
+              --raw).
+          when: yubikey_test_result.rc != 0
+
+    # ── Reset — remove a configuração YubiKey do PAM ──────────────────
+    - name: Reset — remover configuração YubiKey do authselect
+      tags: [yubikey-reset]
+      become: true
+      block:
+        - name: Confirmar reset da configuração YubiKey
+          ansible.builtin.pause:
+            prompt: >-
+              Isto restaura o PAM ao estado anterior ao setup YubiKey
+              (as chaves registradas NÃO são removidas). Digite 'sim'
+              para continuar
+          register: yubikey_reset_confirm
+
+        - name: Localizar o backup authselect mais antigo do YubiKey
+          ansible.builtin.find:
+            paths: /var/lib/authselect/backups
+            patterns: "yubikey-*"
+            file_type: directory
+          register: yubikey_backups
+          when: yubikey_reset_confirm.user_input | default('') | lower == 'sim'
+
+        - name: Restaurar o backup authselect mais antigo
+          ansible.builtin.command: >-
+            authselect backup-restore
+            {{ (yubikey_backups.files | sort(attribute='path'))[0].path | basename }}
+          when: >-
+            yubikey_reset_confirm.user_input | default('') | lower == 'sim' and
+            yubikey_backups.matched | default(0) > 0
+          changed_when: true
+
+        - name: Restaurar perfil local sem YubiKey (nenhum backup encontrado)
+          ansible.builtin.command: >-
+            authselect select local {{ yubikey_authselect_base_features | join(' ') }} --force
+          when: >-
+            yubikey_reset_confirm.user_input | default('') | lower == 'sim' and
+            yubikey_backups.matched | default(0) == 0
+          changed_when: true
+
+  handlers:
+    - name: reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+      become: true
+      listen: reload systemd
+
+    - name: restart pcscd
+      ansible.builtin.systemd:
+        name: pcscd
+        state: restarted
+      become: true
+      listen: restart pcscd

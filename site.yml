@@ -22,6 +22,10 @@
   ansible.builtin.import_playbook: playbooks/zed.yml
   tags: [zed]
 
+- name: YubiKey FIDO2/U2F
+  ansible.builtin.import_playbook: playbooks/yubikey.yml
+  tags: [yubikey]
+
 - name: Usuários adicionais do computador
   ansible.builtin.import_playbook: playbooks/users.yml
   tags: [users]

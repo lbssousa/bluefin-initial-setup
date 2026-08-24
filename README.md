@@ -29,7 +29,11 @@ própria tag: rode só uma com `--tags <tag>`, ou pule uma com
      `/usr/local/share/polkit-1/actions/` — não em `/usr/share/`, que é
      somente leitura em sistemas ostree. Depois de aplicado, ative em
      Bitwarden → Configurações → Segurança → *Desbloquear com autenticação
-     do sistema*.
+     do sistema*. Essa tarefa específica tem a sub-tag `bitwarden-polkit`
+     (`--tags bitwarden-polkit`), usada pelas receitas `just
+     bitwarden-setup-polkit`/`bitwarden-remove-polkit` do
+     [lbssousa/dotfiles](https://github.com/lbssousa/dotfiles) — que
+     hoje chamam este Ansible em vez de um script próprio.
 2. **Homebrew tap `ublue-os` + VSCode/Zed** (`playbooks/homebrew.yml`, tag
    `homebrew`) — adiciona e marca como confiável (`trust: true`) o tap
    [ublue-os/homebrew-tap](https://github.com/ublue-os/homebrew-tap),
@@ -47,7 +51,35 @@ própria tag: rode só uma com `--tags <tag>`, ou pule uma com
    dotfiles/stow ou edição manual —, nunca é sobrescrito, já que tende a
    acumular preferências pessoais (tema, fonte, keybindings) ao longo do
    tempo.
-4. **Usuários adicionais** (`playbooks/users.yml`, tag `users`) — cria as contas listadas em
+4. **YubiKey FIDO2/U2F** (`playbooks/yubikey.yml`, tag `yubikey`) —
+   migrado das receitas `yubikey-*` do `just/.justfile` de
+   [lbssousa/dotfiles](https://github.com/lbssousa/dotfiles) (fluxo
+   atual, baseado em `authselect` gerenciado — não do script
+   `security/yubikey/setup.sh`, legado, que editava
+   `/etc/pam.d/system-auth` via `sed` e desativava o `authselect`).
+   Cada etapa é selecionável com sua própria tag, para rodar isolada
+   (`ansible-playbook site.yml --ask-become-pass --tags
+   yubikey-enroll`):
+   - `yubikey-enroll` — registra a primeira YubiKey em
+     `~/.config/Yubico/u2f_keys` (pula se já existir).
+   - `yubikey-setup-pam` / `yubikey-mode-replace` — aplicam o mesmo
+     perfil `authselect` (YubiKey substitui a senha); duas tags para a
+     mesma ação, espelhando as duas receitas equivalentes do Justfile.
+   - `yubikey-setup-pcscd` — drop-in systemd que evita uma race
+     condition entre o `pcscd` e o `udev` no boot.
+   - `yubikey-mode-2fa` — perfil `authselect` com YubiKey + senha
+     obrigatórios.
+   - `yubikey-test` — testa a autenticação via `sudo`.
+   - `yubikey-reset` — restaura o backup `authselect` mais antigo do
+     YubiKey (ou o perfil base, se não houver backup).
+
+   **A instalação do pacote `pam-u2f` fica fora do escopo**: o feature
+   nativo `with-pam-u2f` do `authselect` espera o `pam_u2f.so` no
+   caminho padrão do sistema, só alcançável via `rpm-ostree install` —
+   o que violaria a regra deste repositório de nunca usar rpm-ostree.
+   Instale antes, manualmente (`just yubikey-install` no dotfiles, ou
+   `rpm-ostree install pam-u2f` + `brew install libfido2` + reboot).
+5. **Usuários adicionais** (`playbooks/users.yml`, tag `users`) — cria as contas listadas em
    `group_vars/all/local_users.yml` (arquivo local, fora do git — veja a
    seção [Dados privados](#dados-privados-usuários-adicionais) abaixo).
    Nenhuma senha é definida: cada conta nova é marcada com
@@ -57,7 +89,7 @@ própria tag: rode só uma com `--tags <tag>`, ou pule uma com
    de senha no primeiro login em vez do prompt normal. A marcação só é
    aplicada na criação da conta — reexecutar o playbook não reseta a
    senha de um usuário que já a definiu.
-5. **Impressora EPSON L4160** (`playbooks/printer.yml`, tag `printer`) — cria a fila CUPS `L4160` em modo
+6. **Impressora EPSON L4160** (`playbooks/printer.yml`, tag `printer`) — cria a fila CUPS `L4160` em modo
    *driverless* (`lpadmin -m everywhere`, suporte nativo a IPP
    Everywhere), sem instalar o driver ESC/P-R da Epson: o filtro CUPS
    dele não tem como ser alcançado pelo `cupsd` fora de `/usr`
@@ -70,7 +102,7 @@ própria tag: rode só uma com `--tags <tag>`, ou pule uma com
    `printer_l4160_hostname` em `group_vars/all/main.yml` se a
    impressora for trocada/renomeada na rede. Pule com
    `--skip-tags printer` em máquinas sem essa impressora.
-6. **Neovim + LazyVim** (`playbooks/neovim.yml`, tag `neovim`) — instala o `neovim` via Homebrew e, se
+7. **Neovim + LazyVim** (`playbooks/neovim.yml`, tag `neovim`) — instala o `neovim` via Homebrew e, se
    `~/.config/nvim` ainda não existir, clona ali o
    [starter oficial do LazyVim](https://github.com/LazyVim/starter),
    removendo o histórico git do template (recomendação oficial do
@@ -78,7 +110,7 @@ própria tag: rode só uma com `--tags <tag>`, ou pule uma com
    plugins depois — veja `nvim/lua/plugins/*.lua` em
    [lbssousa/dotfiles](https://github.com/lbssousa/dotfiles)). Uma
    config já existente nunca é sobrescrita.
-7. **libfprint (goodix538d)** (submódulo `external/bluefin-distrobox-libfprint`, tag `libfprint`) — compila e instala o driver do leitor de
+8. **libfprint (goodix538d)** (submódulo `external/bluefin-distrobox-libfprint`, tag `libfprint`) — compila e instala o driver do leitor de
    digitais Goodix 27c6:538d, executando a automação do repositório
    separado [lbssousa/bluefin-distrobox-libfprint](https://github.com/lbssousa/bluefin-distrobox-libfprint)
    (trazido aqui como submódulo git, via `ansible.builtin.import_playbook`,
@@ -95,6 +127,22 @@ Mais automações devem ser adicionadas a este repositório com o tempo.
 > normais (o módulo `copy` do Ansible não segue symlinks por padrão). Não
 > rode os dois em conjunto na mesma máquina sem restaurar o `stow` depois
 > (`cd dotfiles && ./install.sh -r`).
+
+## Desinstalação
+
+`uninstall.yml`, na raiz do repositório, é um playbook independente de
+`site.yml` (mesmo padrão do `external/bluefin-distrobox-libfprint/uninstall.yml`)
+para reverter automações específicas:
+
+```bash
+ansible-playbook uninstall.yml --ask-become-pass --tags bitwarden-polkit
+```
+
+Hoje só cobre a remoção da polkit action do Bitwarden (equivalente ao
+antigo `bitwarden/uninstall.sh` do
+[lbssousa/dotfiles](https://github.com/lbssousa/dotfiles), que agora
+invoca este playbook em vez de um script próprio). Mais automações de
+desinstalação devem ser adicionadas aqui com o tempo.
 
 ## Dados privados (usuários adicionais)
 
@@ -168,9 +216,11 @@ ainda não estiver no estado desejado.
 | Arquivo/Diretório      | Papel                                                          |
 |-------------------------|-----------------------------------------------------------------|
 | `site.yml`               | Índice: importa cada `playbooks/*.yml` com sua tag              |
+| `uninstall.yml`          | Desinstalação — playbook independente, tags por automação        |
 | `playbooks/bitwarden.yml` | Bitwarden — Flatpak + agente SSH + polkit (tag `bitwarden`)     |
 | `playbooks/homebrew.yml`  | Tap `ublue-os` + VSCode/Zed (tag `homebrew`)                    |
 | `playbooks/zed.yml`       | Podman como runtime de dev containers no Zed (tag `zed`)         |
+| `playbooks/yubikey.yml`   | YubiKey FIDO2/U2F — etapas selecionáveis (tags `yubikey-*`)      |
 | `playbooks/users.yml`     | Usuários adicionais (tag `users`)                                |
 | `playbooks/printer.yml`   | Impressora EPSON L4160 driverless (tag `printer`)                |
 | `playbooks/neovim.yml`    | Neovim + LazyVim (tag `neovim`)                                  |
@@ -187,6 +237,8 @@ ainda não estiver no estado desejado.
 
 - Configuração do Bitwarden (agente SSH + polkit biométrico) baseada em
   [lbssousa/dotfiles](https://github.com/lbssousa/dotfiles).
+- Automação do YubiKey FIDO2/U2F migrada das receitas `yubikey-*` do
+  `just/.justfile` de [lbssousa/dotfiles](https://github.com/lbssousa/dotfiles).
 - Estrutura da fila da impressora EPSON L4160 baseada em
   [lbssousa/nix-config](https://github.com/lbssousa/nix-config).
 - Automação do libfprint (goodix538d) do repositório separado

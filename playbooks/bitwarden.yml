@@ -80,6 +80,7 @@
             mode: "0644"
           become: true
           notify: reiniciar polkit
+          tags: [bitwarden-polkit]
 
   handlers:
     - name: reload systemd --user
