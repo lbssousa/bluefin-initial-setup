@@ -1,7 +1,18 @@
 ---
 # Bitwarden: Flatpak + agente SSH ligado à sessão + polkit para
 # desbloqueio biométrico. Configuração de referência:
-# github.com/lbssousa/dotfiles
+# github.com/lbssousa/dotfiles (pacote stow "bitwarden").
+#
+# O environment.d e as unidades systemd --user do agente SSH usam
+# force: false — só são copiados se o destino ainda não existir. Numa
+# máquina que já aplicou o dotfiles/stow, o destino já é um symlink
+# válido para o mesmo conteúdo, então o Ansible não mexe nele (evita
+# substituir o symlink por um arquivo normal). Isto bootstrapa só uma
+# máquina nova, sem o dotfiles ainda aplicado — mesmo raciocínio do
+# playbooks/neovim.yml. A polkit action é diferente: o pacote stow do
+# dotfiles a exclui de propósito (precisa de root em /usr/local, fora
+# do alcance do stow em $HOME), então ela continua sempre sincronizada
+# via Ansible.
 - name: Bitwarden — Flatpak + agente SSH + polkit (desbloqueio biométrico)
   hosts: localhost
   connection: local
@@ -41,6 +52,7 @@
             src: 20-bitwarden-ssh-agent.conf
             dest: "{{ ansible_facts.env.HOME }}/.config/environment.d/20-bitwarden-ssh-agent.conf"
             mode: "0644"
+            force: false
 
         - name: Criar ~/.config/systemd/user
           ansible.builtin.file:
@@ -53,6 +65,7 @@
             src: "{{ item }}"
             dest: "{{ ansible_facts.env.HOME }}/.config/systemd/user/{{ item }}"
             mode: "0644"
+            force: false
           loop: "{{ bitwarden_ssh_agent_units }}"
           notify: reload systemd --user
 

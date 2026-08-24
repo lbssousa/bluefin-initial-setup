@@ -120,13 +120,13 @@ própria tag: rode só uma com `--tags <tag>`, ou pule uma com
 
 Mais automações devem ser adicionadas a este repositório com o tempo.
 
-> **Atenção — máquinas que já usam [lbssousa/dotfiles](https://github.com/lbssousa/dotfiles):**
-> se `~/.config/environment.d/20-bitwarden-ssh-agent.conf` e as unidades em
-> `~/.config/systemd/user/` já forem symlinks criados pelo `stow` desse
-> repositório, rodar este playbook substitui os symlinks por arquivos
-> normais (o módulo `copy` do Ansible não segue symlinks por padrão). Não
-> rode os dois em conjunto na mesma máquina sem restaurar o `stow` depois
-> (`cd dotfiles && ./install.sh -r`).
+> **Máquinas que já usam [lbssousa/dotfiles](https://github.com/lbssousa/dotfiles):**
+> `~/.config/environment.d/20-bitwarden-ssh-agent.conf` e as unidades em
+> `~/.config/systemd/user/` (`bitwarden-ssh-agent.path`,
+> `bitwarden-ssh-agent-env.service`) só são copiados se ainda não
+> existirem — se já forem symlinks criados pelo `stow` desse repositório,
+> o Ansible não mexe neles (`force: false`, veja `playbooks/bitwarden.yml`).
+> É seguro rodar os dois na mesma máquina.
 
 ## Desinstalação
 
