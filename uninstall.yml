@@ -1,0 +1,21 @@
+---
+# Desinstalação — playbook independente, à parte de site.yml (mesmo
+# padrão do external/bluefin-distrobox-libfprint/uninstall.yml). Rode
+# com `ansible-playbook uninstall.yml --ask-become-pass`, ou só uma
+# automação com `--tags <tag>`.
+#
+# Mais automações de desinstalação devem ser adicionadas aqui com o
+# tempo, conforme site.yml ganha novas automações que valha a pena
+# reverter.
+- name: Bitwarden — remover a polkit action (desbloqueio biométrico)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Remover a polkit action do Bitwarden
+      ansible.builtin.file:
+        path: "{{ bitwarden_polkit_action_dest }}"
+        state: absent
+      tags: [bitwarden-polkit]

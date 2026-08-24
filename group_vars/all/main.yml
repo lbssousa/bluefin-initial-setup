@@ -52,3 +52,11 @@ printer_l4160_set_default: true
 # clonado se ~/.config/nvim ainda não existir (nunca sobrescreve uma
 # config já presente, como a aplicada via dotfiles/stow).
 lazyvim_starter_repo: https://github.com/LazyVim/starter.git
+
+# YubiKey FIDO2/U2F — features do authselect mantidas em todos os modos
+# (remova "with-fingerprint" se a máquina não tiver leitor biométrico —
+# veja external/bluefin-distrobox-libfprint). A instalação do pacote
+# pam-u2f fica fora desta automação (veja playbooks/yubikey.yml).
+yubikey_authselect_base_features:
+  - with-fingerprint
+yubikey_pcscd_dropin: /etc/systemd/system/pcscd.service.d/udevadm-settle.conf
