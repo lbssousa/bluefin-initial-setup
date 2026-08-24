@@ -7,8 +7,12 @@
 # https://www.lazyvim.org/installation). Uma config já existente (por
 # exemplo aplicada via dotfiles/stow) nunca é sobrescrita.
 #
-# Além disso, instala em lua/plugins/ (sempre reaplicado, mesmo sobre
-# uma config pré-existente) duas customizações próprias desta automação:
+# Além disso, instala em lua/plugins/ duas customizações próprias desta
+# automação — cada uma só se o arquivo de destino ainda não existir
+# (force: false), para nunca sobrescrever uma versão colocada manualmente
+# (por exemplo copiada/symlinkada a partir de nvim/lua/plugins/*.lua no
+# lbssousa/dotfiles, que não é aplicado automaticamente via stow — veja
+# o README de lá):
 #   - extras.lua: habilita o extra/preset de LaTeX do LazyVim (equivalente
 #     a :LazyExtras > lang.tex — https://www.lazyvim.org/extras/lang/tex).
 #     Requer uma distribuição LaTeX (ex.: TeX Live) e, opcionalmente,
@@ -16,7 +20,10 @@
 #     por este playbook.
 #   - gregorio.lua: instala o plugin AISCGre-BR/gregorio.nvim, para
 #     notação litúrgica GABC/NABC (Gregorio) — carregado sob demanda
-#     (ft = "gabc").
+#     (ft = "gabc"). O dotfiles tem um gregorio.lua próprio (mais
+#     elaborado, com LSP e treesitter customizados) sob o mesmo nome —
+#     o force: false evita que este playbook substitua essa versão se
+#     ela já tiver sido colocada manualmente.
 - name: Neovim + LazyVim
   hosts: localhost
   connection: local
@@ -73,9 +80,11 @@
             src: nvim-extras.lua
             dest: "{{ ansible_facts.env.HOME }}/.config/nvim/lua/plugins/extras.lua"
             mode: "0644"
+            force: false
 
         - name: Instalar o plugin gregorio.nvim (notação litúrgica GABC/NABC)
           ansible.builtin.copy:
             src: nvim-gregorio.lua
             dest: "{{ ansible_facts.env.HOME }}/.config/nvim/lua/plugins/gregorio.lua"
             mode: "0644"
+            force: false
