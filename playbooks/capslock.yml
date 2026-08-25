@@ -1,0 +1,108 @@
+---
+# Caps Lock remapeado a nível evdev via kanata (tap=Esc, hold=Ctrl,
+# Shift+tap=Caps Lock literal) — funciona igual em TTY e Wayland, ao
+# contrário de setxkbmap/GNOME "Origens de entrada" (Xorg/compositor
+# only, não alcança o TTY). Portado de lbssousa/nix-config
+# (modules/system/core/localization.nix).
+#
+# kanata precisa rodar como root: /dev/uinput neste sistema é root:root
+# modo 660 e não existe grupo "uinput" (só um grupo "input" sem acesso a
+# /dev/uinput) — daí a unidade systemd de sistema abaixo, não um serviço
+# --user.
+#
+# DESVIO do caveat oficial do brew ("sudo brew services start kanata"):
+# em vez de community.general.homebrew_services, este playbook escreve
+# sua própria unidade systemd (kanata.service.j2) e a gerencia direto.
+# Motivo, verificado nesta imagem: o `brew services` do Linux grava
+# serviços de root em /usr/lib/systemd/system, que é somente leitura em
+# sistemas ostree/composefs (Bluefin) — "sudo brew services start
+# kanata" falharia com "Read-only file system". Escrever a unidade em
+# /etc/systemd/system/ (gravável, mesmo padrão do yubikey_pcscd_dropin
+# em playbooks/yubikey.yml) evita esse problema e, de brinde, evita a
+# ambiguidade de onde o kanata.kbd deveria morar: o `service do` da
+# fórmula usa Dir.home do processo no momento em que a unidade é
+# gerada — como o `become` do Ansible roda sudo com "-H" por padrão,
+# isso resolveria para /root, não para o $HOME do usuário real.
+# Controlando o ExecStart nós mesmos, kanata_config_dest continua sendo
+# ~/.config/kanata/kanata.kbd, como qualquer outra config pessoal deste
+# repositório.
+- name: Caps Lock via kanata (evdev, tap=Esc / hold=Ctrl)
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  pre_tasks:
+    - name: Garantir que o Homebrew (linuxbrew) está disponível
+      ansible.builtin.stat:
+        path: "{{ homebrew_prefix }}/bin/brew"
+      register: brew_bin
+
+    - name: Falhar com orientação se o Homebrew não for encontrado
+      ansible.builtin.fail:
+        msg: >-
+          Homebrew não encontrado em {{ homebrew_prefix }}. Nas imagens
+          uBlue/Bluefin ele já vem pré-instalado; em outras, instale-o
+          primeiro (https://brew.sh).
+      when: not brew_bin.stat.exists
+
+  tasks:
+    - name: Caps Lock via kanata
+      block:
+        - name: Instalar o kanata via Homebrew
+          community.general.homebrew:
+            name: kanata
+            state: present
+
+        - name: Verificar se já existe configuração do kanata
+          ansible.builtin.stat:
+            path: "{{ kanata_config_dest }}"
+          register: kanata_config_stat
+
+        - name: Garantir que ~/.config/kanata existe
+          ansible.builtin.file:
+            path: "{{ kanata_config_dest | dirname }}"
+            state: directory
+            mode: "0755"
+          when: not kanata_config_stat.stat.exists
+
+        - name: Instalar a configuração do Caps Lock
+          ansible.builtin.copy:
+            src: kanata.kbd
+            dest: "{{ kanata_config_dest }}"
+            mode: "0644"
+            force: false
+          notify: restart kanata
+
+        - name: Instalar a unidade systemd do kanata
+          ansible.builtin.template:
+            src: kanata.service.j2
+            dest: "{{ kanata_systemd_unit }}"
+            owner: root
+            group: root
+            mode: "0644"
+          become: true
+          notify:
+            - reload systemd
+            - restart kanata
+
+        - name: Habilitar e iniciar o serviço do kanata
+          ansible.builtin.systemd:
+            name: kanata
+            daemon_reload: true
+            enabled: true
+            state: started
+          become: true
+
+  handlers:
+    - name: reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+      become: true
+      listen: reload systemd
+
+    - name: restart kanata
+      ansible.builtin.systemd:
+        name: kanata
+        state: restarted
+      become: true
+      listen: restart kanata

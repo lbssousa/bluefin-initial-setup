@@ -1,0 +1,81 @@
+---
+# KeePassXC — trava todas as bases quando a YubiKey é removida da porta
+# USB (evento udev "remove"), via chamada D-Bus a
+# org.keepassxc.KeePassXC.MainWindow.lockAllDatabases. Portado de
+# lbssousa/nix-config (modules/system/security/keepassxc-yubikey-lock.nix)
+# — mesmo mecanismo (script chamado por regra udev via systemd-run),
+# adaptado para um único usuário (o que roda este Ansible), não a lista
+# de usuários configurável do módulo NixOS original.
+#
+# A instalação do KeePassXC fica FORA do escopo desta automação (mesmo
+# raciocínio do pam-u2f em playbooks/yubikey.yml): esta automação só
+# liga o gatilho (regra udev + script), assumindo que o KeePassXC já
+# está instalado e rodando com a integração D-Bus habilitada (ativa por
+# padrão em Ferramentas > Configurações > Geral).
+#
+# Desvio proposital do nix-config original: a regra udev casa
+# ENV{PRODUCT}=="1050/*" (qualquer produto do vendor Yubico), em vez do
+# produto específico "1050/407" hardcoded lá — cobre qualquer modelo de
+# YubiKey que o usuário conecte. Ver o cabeçalho de
+# playbooks/files/keepassxc-yubikey-lock.rules.j2 para detalhes.
+- name: KeePassXC — travar ao remover a YubiKey (udev + D-Bus)
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  pre_tasks:
+    - name: Verificar se o KeePassXC está instalado (Flatpak)
+      ansible.builtin.command: flatpak info org.keepassxc.KeePassXC
+      register: keepassxc_flatpak_check
+      changed_when: false
+      failed_when: false
+
+    - name: Verificar se o KeePassXC está instalado (binário no PATH)
+      ansible.builtin.command: which keepassxc
+      register: keepassxc_bin_check
+      changed_when: false
+      failed_when: false
+
+    - name: Falhar com orientação se o KeePassXC não for encontrado
+      ansible.builtin.fail:
+        msg: >-
+          KeePassXC não encontrado (nem via Flatpak
+          org.keepassxc.KeePassXC, nem no PATH). A instalação fica fora
+          desta automação — instale-o antes e habilite Ferramentas >
+          Configurações > Geral > "Habilitar integração com D-Bus"
+          (ativa por padrão).
+      when: keepassxc_flatpak_check.rc != 0 and keepassxc_bin_check.rc != 0
+
+  tasks:
+    - name: KeePassXC — travar ao remover a YubiKey
+      become: true
+      block:
+        - name: Instalar o script de travamento via D-Bus
+          ansible.builtin.copy:
+            src: keepassxc-yubikey-lock.sh
+            dest: "{{ keepassxc_yubikey_lock_script_dest }}"
+            owner: root
+            group: root
+            mode: "0755"
+
+        - name: Instalar a regra udev (dispara na remoção da YubiKey)
+          ansible.builtin.template:
+            src: keepassxc-yubikey-lock.rules.j2
+            dest: "{{ keepassxc_yubikey_lock_udev_rule_dest }}"
+            owner: root
+            group: root
+            mode: "0644"
+          notify:
+            - reload udev rules
+            - trigger udev
+
+  handlers:
+    - name: reload udev rules
+      ansible.builtin.command: udevadm control --reload-rules
+      changed_when: false
+      listen: reload udev rules
+
+    - name: trigger udev
+      ansible.builtin.command: udevadm trigger
+      changed_when: false
+      listen: trigger udev

@@ -60,3 +60,19 @@ lazyvim_starter_repo: https://github.com/LazyVim/starter.git
 yubikey_authselect_base_features:
   - with-fingerprint
 yubikey_pcscd_dropin: /etc/systemd/system/pcscd.service.d/udevadm-settle.conf
+
+# Kanata — remapeamento do Caps Lock a nível evdev (tap=Esc, hold=Ctrl,
+# Shift+tap=Caps Lock literal), via unidade systemd própria (não
+# community.general.homebrew_services — veja o cabeçalho de
+# playbooks/capslock.yml para o motivo). kanata_config_dest é a config
+# pessoal do usuário atual e nunca é sobrescrita se já existir.
+kanata_config_dest: "{{ ansible_facts.env.HOME }}/.config/kanata/kanata.kbd"
+kanata_systemd_unit: /etc/systemd/system/kanata.service
+
+# KeePassXC — trava todas as bases quando a YubiKey é removida (evento
+# udev), via D-Bus (org.keepassxc.KeePassXC.MainWindow.lockAllDatabases).
+# Requer o KeePassXC já instalado (fora do escopo desta automação — veja
+# playbooks/keepassxc.yml) com a integração D-Bus habilitada (ativa por
+# padrão).
+keepassxc_yubikey_lock_script_dest: /usr/local/bin/keepassxc-yubikey-lock.sh
+keepassxc_yubikey_lock_udev_rule_dest: /etc/udev/rules.d/70-keepassxc-yubikey-lock.rules

@@ -117,6 +117,34 @@ própria tag: rode só uma com `--tags <tag>`, ou pule uma com
    então roda dentro do mesmo `--ask-become-pass`). Em máquinas sem esse
    leitor, pule com `ansible-playbook site.yml --ask-become-pass
    --skip-tags libfprint` (ou `just setup-no-libfprint`).
+9. **Caps Lock via kanata** (`playbooks/capslock.yml`, tag `capslock`) — instala o
+   [kanata](https://github.com/jtroo/kanata) via Homebrew e remapeia o
+   Caps Lock a nível evdev: toque rápido vira `Esc`, segurado vira
+   `Ctrl`, e Shift+toque preserva o Caps Lock original. Por operar em
+   evdev (não em X11/Xorg), funciona igual em TTY e em sessão
+   GNOME/Wayland — ao contrário do `setxkbmap`/"Origens de entrada" do
+   GNOME, que só alcança o compositor gráfico. Roda como serviço de
+   sistema (`systemd`, unidade própria em `/etc/systemd/system/`, não
+   via `brew services`) porque `/dev/uinput` neste sistema é
+   `root:root` e não tem grupo de acesso. Configuração de referência em
+   [lbssousa/nix-config](https://github.com/lbssousa/nix-config)
+   (`modules/system/core/localization.nix`). Mesmo raciocínio do Neovim
+   e do Zed acima: `~/.config/kanata/kanata.kbd` só é copiado se ainda
+   não existir, nunca sobrescrito.
+10. **KeePassXC — travar ao remover a YubiKey** (`playbooks/keepassxc.yml`, tag
+    `keepassxc-yubikey-lock`) — instala uma regra udev que trava todas
+    as bases do KeePassXC (via D-Bus,
+    `org.keepassxc.KeePassXC.MainWindow.lockAllDatabases`) sempre que a
+    YubiKey é desconectada da porta USB. **A instalação do KeePassXC
+    fica fora do escopo** (mesmo raciocínio do `pam-u2f` no item
+    YubiKey acima): pressupõe o app já instalado, com a integração
+    D-Bus habilitada (ativa por padrão em Ferramentas → Configurações →
+    Geral). A regra casa qualquer YubiKey pelo vendor ID da Yubico
+    (`1050`), não um modelo específico — desvio proposital da
+    configuração de referência em
+    [lbssousa/nix-config](https://github.com/lbssousa/nix-config)
+    (`modules/system/security/keepassxc-yubikey-lock.nix`), que trava
+    num único modelo.
 
 Mais automações devem ser adicionadas a este repositório com o tempo.
 
@@ -138,11 +166,15 @@ para reverter automações específicas:
 ansible-playbook uninstall.yml --ask-become-pass --tags bitwarden-polkit
 ```
 
-Hoje só cobre a remoção da polkit action do Bitwarden (equivalente ao
-antigo `bitwarden/uninstall.sh` do
+Cobre a remoção da polkit action do Bitwarden (equivalente ao antigo
+`bitwarden/uninstall.sh` do
 [lbssousa/dotfiles](https://github.com/lbssousa/dotfiles), que agora
-invoca este playbook em vez de um script próprio). Mais automações de
-desinstalação devem ser adicionadas aqui com o tempo.
+invoca este playbook em vez de um script próprio), do serviço/unidade
+systemd do kanata (tag `capslock`) e da regra udev/script do
+KeePassXC (tag `keepassxc-yubikey-lock`) — em ambos os casos, sem
+remover a config pessoal (`kanata.kbd`) nem desinstalar pacotes via
+Homebrew. Mais automações de desinstalação devem ser adicionadas aqui
+com o tempo.
 
 ## Dados privados (usuários adicionais)
 
@@ -224,6 +256,8 @@ ainda não estiver no estado desejado.
 | `playbooks/users.yml`     | Usuários adicionais (tag `users`)                                |
 | `playbooks/printer.yml`   | Impressora EPSON L4160 driverless (tag `printer`)                |
 | `playbooks/neovim.yml`    | Neovim + LazyVim (tag `neovim`)                                  |
+| `playbooks/capslock.yml`  | Caps Lock via kanata (tag `capslock`)                            |
+| `playbooks/keepassxc.yml` | KeePassXC — trava ao remover a YubiKey (tag `keepassxc-yubikey-lock`) |
 | `playbooks/files/`        | Arquivos estáticos copiados como estão (unidades systemd, polkit action, environment.d) — compartilhado pelos playbooks acima |
 | `group_vars/all/main.yml` | Variáveis públicas de todas as automações (IDs de Flatpak, nome do tap, casks, caminhos) |
 | `group_vars/all/local_users.yml.example` | Template dos usuários adicionais (copie para `local_users.yml`) |
@@ -243,3 +277,9 @@ ainda não estiver no estado desejado.
   [lbssousa/nix-config](https://github.com/lbssousa/nix-config).
 - Automação do libfprint (goodix538d) do repositório separado
   [lbssousa/bluefin-distrobox-libfprint](https://github.com/lbssousa/bluefin-distrobox-libfprint).
+- Remapeamento do Caps Lock via kanata baseado em
+  [lbssousa/nix-config](https://github.com/lbssousa/nix-config)
+  (`modules/system/core/localization.nix`).
+- Trava do KeePassXC ao remover a YubiKey baseada em
+  [lbssousa/nix-config](https://github.com/lbssousa/nix-config)
+  (`modules/system/security/keepassxc-yubikey-lock.nix`).
