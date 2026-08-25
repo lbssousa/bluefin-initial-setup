@@ -1,0 +1,27 @@
+;; Caps Lock: tap -> Esc, hold -> Ctrl, Shift+tap -> Caps Lock literal.
+;; Processado em nível evdev (funciona igual em TTY e Wayland, ao
+;; contrário de setxkbmap/GNOME "Origens de entrada", que só cobre
+;; X11/compositor). Portado de lbssousa/nix-config
+;; (modules/system/core/localization.nix).
+;;
+;; Este arquivo acumula preferências pessoais ao longo do tempo — o
+;; Ansible só o copia se ainda não existir (playbooks/capslock.yml,
+;; force: false), então é seguro editar à vontade depois.
+(defcfg
+  process-unmapped-keys yes
+)
+
+(defsrc
+  caps
+)
+
+(defalias
+  caps (fork
+    (tap-hold-press 200 200 esc lctrl)
+    (tap-hold-press 200 200 caps lctrl)
+    (lsft rsft))
+)
+
+(deflayer base
+  @caps
+)

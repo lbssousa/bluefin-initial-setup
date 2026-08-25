@@ -19,3 +19,57 @@
         path: "{{ bitwarden_polkit_action_dest }}"
         state: absent
       tags: [bitwarden-polkit]
+
+- name: Kanata — remover o serviço e a unidade systemd (Caps Lock)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Parar e desabilitar o serviço do kanata
+      ansible.builtin.systemd:
+        name: kanata
+        state: stopped
+        enabled: false
+      failed_when: false
+      tags: [capslock]
+
+    - name: Remover a unidade systemd do kanata
+      ansible.builtin.file:
+        path: "{{ kanata_systemd_unit }}"
+        state: absent
+      notify: reload systemd (kanata)
+      tags: [capslock]
+
+  handlers:
+    - name: reload systemd (kanata)
+      ansible.builtin.systemd:
+        daemon_reload: true
+      listen: reload systemd (kanata)
+
+- name: KeePassXC — remover a regra udev e o script de travamento
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: true
+
+  tasks:
+    - name: Remover a regra udev
+      ansible.builtin.file:
+        path: "{{ keepassxc_yubikey_lock_udev_rule_dest }}"
+        state: absent
+      notify: reload udev rules (keepassxc)
+      tags: [keepassxc-yubikey-lock]
+
+    - name: Remover o script de travamento via D-Bus
+      ansible.builtin.file:
+        path: "{{ keepassxc_yubikey_lock_script_dest }}"
+        state: absent
+      tags: [keepassxc-yubikey-lock]
+
+  handlers:
+    - name: reload udev rules (keepassxc)
+      ansible.builtin.command: udevadm control --reload-rules
+      changed_when: false
+      listen: reload udev rules (keepassxc)

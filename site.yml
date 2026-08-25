@@ -41,3 +41,11 @@
 - name: libfprint (goodix538d) — github.com/lbssousa/bluefin-distrobox-libfprint
   ansible.builtin.import_playbook: external/bluefin-distrobox-libfprint/site.yml
   tags: [libfprint]
+
+- name: Caps Lock via kanata (evdev, tap=Esc / hold=Ctrl)
+  ansible.builtin.import_playbook: playbooks/capslock.yml
+  tags: [capslock]
+
+- name: KeePassXC — travar ao remover a YubiKey
+  ansible.builtin.import_playbook: playbooks/keepassxc.yml
+  tags: [keepassxc-yubikey-lock]
