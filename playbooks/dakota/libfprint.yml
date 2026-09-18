@@ -16,12 +16,16 @@
 #   - O runtime do OpenCV que o matcher SIGFM precisa vem do Homebrew
 #     (linuxbrew, confirmado pré-instalado no Dakota), montado
 #     read-only dentro do container — nunca via dnf no host.
-#   - O resultado só é instalado em /usr/local (gravável tanto em
-#     rpm-ostree quanto no bootc/composefs-oci do Dakota) e num drop-in
-#     systemd do fprintd.service em /etc — nunca em /usr.
+#   - O resultado só é instalado em /var/usrlocal (dakota_libfprint_usrlocal_prefix
+#     — verificado em hardware real: diferente do OSTree clássico, no
+#     Dakota /usr/local NÃO é um symlink gravável para /var/usrlocal, é
+#     um diretório de verdade dentro da imagem somente-leitura de /usr;
+#     /var/usrlocal existe e é gravável, mas precisa ser usado
+#     diretamente) e num drop-in systemd do fprintd.service em /etc —
+#     nunca em /usr.
 #
 # Usage: ansible-playbook site-dakota.yml --ask-become-pass --tags libfprint
-- name: libfprint (goodix538d) no Dakota — build em distrobox + install em /usr/local
+- name: libfprint (goodix538d) no Dakota — build em distrobox + install em /var/usrlocal
   hosts: localhost
   connection: local
   gather_facts: true
@@ -101,6 +105,28 @@
         path: "{{ dakota_libfprint_checkout_dir }}/builddir/build.ninja"
       register: builddir_stat
 
+    # meson-info/intro-buildoptions.json é gerado no host (o builddir é
+    # compartilhado entre host e container, já que o $HOME do container é
+    # o mesmo do host) — dá pra ler o prefix já configurado sem entrar no
+    # distrobox. Necessário porque mudar dakota_libfprint_usrlocal_prefix
+    # (ex.: /usr/local -> /var/usrlocal, veja o cabeçalho do arquivo) não
+    # invalida sozinho um builddir já configurado com o prefix antigo —
+    # sem checar isso, "ninja install" instala de novo no prefix velho.
+    - name: Ler o prefix configurado no build existente (se houver)
+      ansible.builtin.slurp:
+        src: "{{ dakota_libfprint_checkout_dir }}/builddir/meson-info/intro-buildoptions.json"
+      register: builddir_options_raw
+      when: builddir_stat.stat.exists
+
+    - name: Detectar se o prefix configurado mudou desde o último build
+      ansible.builtin.set_fact:
+        dakota_libfprint_configured_prefix: >-
+          {{ (builddir_options_raw.content | b64decode | from_json
+              | selectattr('name', 'equalto', 'prefix')
+              | map(attribute='value') | list | first)
+             | default('', true) }}
+      when: builddir_stat.stat.exists
+
     - name: Configurar o build (meson setup)
       ansible.builtin.shell: >
         distrobox enter {{ dakota_libfprint_container_name }} -- bash -c
@@ -109,13 +135,16 @@
         meson setup builddir --prefix={{ dakota_libfprint_usrlocal_prefix }} -Ddrivers=all"
       when: not builddir_stat.stat.exists
 
-    - name: Reconfigurar o build se o código-fonte mudou
+    - name: Reconfigurar o build se o código-fonte ou o prefix mudou
       ansible.builtin.shell: >
         distrobox enter {{ dakota_libfprint_container_name }} -- bash -c
         "export PKG_CONFIG_PATH={{ opencv_prefix.stdout }}/lib/pkgconfig &&
         cd {{ dakota_libfprint_checkout_dir }} &&
         meson setup builddir --prefix={{ dakota_libfprint_usrlocal_prefix }} -Ddrivers=all --reconfigure"
-      when: builddir_stat.stat.exists and git_result.changed
+      when: >-
+        builddir_stat.stat.exists and
+        (git_result.changed or
+         dakota_libfprint_configured_prefix != dakota_libfprint_usrlocal_prefix)
 
     - name: Compilar com ninja
       ansible.builtin.shell: >
@@ -139,9 +168,10 @@
       changed_when: false
 
     - name: Descobrir as bibliotecas de runtime do Homebrew que o libfprint precisa
-      # Vendorizadas (copiadas) para /usr/local/lib64 junto do próprio
-      # libfprint, em vez de apontar o fprintd.service para /home/linuxbrew
-      # em tempo de execução — ver a task "Vendorizar..." abaixo.
+      # Vendorizadas (copiadas) para dentro de /var/usrlocal/lib64 junto
+      # do próprio libfprint, em vez de apontar o fprintd.service para
+      # /home/linuxbrew em tempo de execução — ver a task
+      # "Vendorizar..." abaixo.
       ansible.builtin.shell: >
         LD_LIBRARY_PATH={{ opencv_prefix.stdout }}/lib
         ldd {{ dakota_libfprint_stage_dir }}{{ dakota_libfprint_usrlocal_libdir }}/libfprint-2.so.2.0.0
@@ -153,12 +183,14 @@
 
     # ---------------------------------------------------------------------
     # 5. Instalação no host (únicos passos privilegiados, restritos a
-    #    /usr/local, /etc/udev e um drop-in systemd. /usr nunca é escrito.)
+    #    /var/usrlocal, /etc/udev e um drop-in systemd. /usr nunca é
+    #    escrito — /usr/local não é usado aqui porque, no Dakota, ele NÃO
+    #    é gravável (ver o cabeçalho do arquivo).
     # ---------------------------------------------------------------------
     - name: Instalação no host (privilegiada)
       become: true
       block:
-        - name: Garantir que os diretórios de destino em /usr/local existem
+        - name: Garantir que os diretórios de destino em /var/usrlocal existem
           ansible.builtin.file:
             path: "{{ item }}"
             state: directory
@@ -168,7 +200,7 @@
             - "{{ dakota_libfprint_usrlocal_prefix }}/include"
             - "{{ dakota_libfprint_usrlocal_prefix }}/share"
 
-        - name: Copiar lib, headers, pkgconfig e gir/typelib para /usr/local
+        - name: Copiar lib, headers, pkgconfig e gir/typelib para /var/usrlocal
           ansible.builtin.copy:
             src: "{{ dakota_libfprint_stage_dir }}{{ dakota_libfprint_usrlocal_prefix }}/{{ item }}/"
             dest: "{{ dakota_libfprint_usrlocal_prefix }}/{{ item }}/"
@@ -178,7 +210,7 @@
             - include
             - share
 
-        - name: Vendorizar as bibliotecas de runtime do Homebrew em /usr/local/lib64
+        - name: Vendorizar as bibliotecas de runtime do Homebrew em /var/usrlocal/lib64
           ansible.builtin.command:
             cmd: cp -L {{ item }} {{ dakota_libfprint_usrlocal_libdir }}/
           loop: "{{ brew_libs.stdout_lines }}"
@@ -192,7 +224,7 @@
         # user_home_t. Se o Dakota usar SELinux com um domínio confinado
         # para o fprintd (herança do Fedora/GNOME OS), o mesmo problema do
         # Fedora se aplicaria; se não usar SELinux, esta tarefa é no-op.
-        - name: Corrigir o contexto SELinux de /usr/local/lib64 (se SELinux estiver habilitado)
+        - name: Corrigir o contexto SELinux de /var/usrlocal/lib64 (se SELinux estiver habilitado)
           community.general.sefcontext:
             target: "{{ dakota_libfprint_usrlocal_libdir }}(/.*)?"
             setype: lib_t
@@ -219,9 +251,15 @@
             state: directory
             mode: "0755"
 
-        - name: Apontar o fprintd.service para /usr/local + OpenCV do Homebrew
+        - name: Apontar o fprintd.service para /var/usrlocal + OpenCV do Homebrew
+          # Caminho absoluto (em vez do nome puro) porque este playbook
+          # mora em playbooks/dakota/, não em playbooks/ como os demais —
+          # a busca implícita do módulo por um "templates/" ao lado do
+          # arquivo do playbook não alcançaria playbooks/files/, onde
+          # este template fica (mesmo padrão de
+          # dakota_libfprint_distrobox_ini_file acima).
           ansible.builtin.template:
-            src: dakota-fprintd-override.conf.j2
+            src: "{{ inventory_dir }}/playbooks/files/dakota-fprintd-override.conf.j2"
             dest: /etc/systemd/system/fprintd.service.d/override.conf
             mode: "0644"
           notify:

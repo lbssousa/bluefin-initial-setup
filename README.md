@@ -202,10 +202,15 @@ PAM). Ainda em alpha. Por isso existe `site-dakota.yml`, espelhando
   `external/bluefin-distrobox-libfprint` (cujo README fala
   explicitamente de "desktop Fedora Atomic"). Mesma estratégia (compilar
   o fork [lbssousa/libfprint](https://github.com/lbssousa/libfprint) num
-  container distrobox descartável — `playbooks/files/dakota-libfprint-distrobox.ini`
-  — e instalar só em `/usr/local`, gravável tanto em rpm-ostree quanto
-  no bootc/composefs-oci do Dakota), reimplementada para não depender de
-  um repositório rotulado para Fedora.
+  container distrobox descartável —
+  `playbooks/files/dakota-libfprint-distrobox.ini`), mas instalando em
+  **`/var/usrlocal`, não `/usr/local`**: verificado em hardware real que,
+  ao contrário do OSTree clássico (onde `/usr/local` é um symlink para
+  `/var/usrlocal`, logo gravável), no Dakota `/usr/local` é um diretório
+  de verdade embutido na imagem somente-leitura de `/usr` — escrever lá
+  falha com "Read-only file system". `/var/usrlocal` existe na imagem
+  (gravável, no `/var` em btrfs) mas não vem ligado a `/usr/local` por
+  nenhum fstab/unit, então a automação usa esse caminho diretamente.
 
 Todos os outros playbooks (`zed`, `users`, `printer`, `neovim`,
 `capslock`, `keepassxc`, e o próprio `bitwarden`, que também não roda
@@ -252,7 +257,7 @@ systemd do kanata (tag `capslock`), da regra udev/script do
 KeePassXC (tag `keepassxc-yubikey-lock`), da ponte de native messaging
 do KeePassXC com os navegadores Flatpak (tag `keepassxc-browser` —
 remove o manifesto, o wrapper e a permissão `talk-name` concedida a
-cada navegador) e, no Dakota, do install em `/usr/local` +
+cada navegador) e, no Dakota, do install em `/var/usrlocal` +
 `fprintd.service` do libfprint (tag `libfprint-dakota`) — em todos os
 casos, sem remover a config pessoal (`kanata.kbd`) nem desinstalar
 pacotes via Homebrew. Mais automações de desinstalação devem ser
@@ -343,7 +348,8 @@ ainda não estiver no estado desejado.
 | `playbooks/keepassxc.yml` | KeePassXC — trava ao remover a YubiKey + ponte de native messaging (tags `keepassxc-yubikey-lock`/`keepassxc-browser`) |
 | `playbooks/dakota/yubikey.yml`   | YubiKey no Dakota — só `yubikey-setup-pcscd` + `yubikey-gpg-import`, sem PAM |
 | `playbooks/dakota/libfprint.yml` | libfprint no Dakota — build/install autocontidos, sem o submódulo |
-| `playbooks/files/`        | Arquivos estáticos copiados como estão (unidades systemd, polkit action, environment.d, manifesto/wrapper do KeePassXC-Browser, distrobox.ini/drop-in do libfprint no Dakota) — compartilhado pelos playbooks acima |
+| `playbooks/files/`        | Arquivos estáticos copiados como estão via `copy` (unidades systemd, polkit action, environment.d, script wrapper do KeePassXC-Browser, distrobox.ini do libfprint no Dakota) — compartilhado pelos playbooks acima |
+| `playbooks/templates/`    | Arquivos `.j2` renderizados via `template` (regra udev do KeePassXC-YubiKey-lock, unidade do kanata, manifesto do KeePassXC-Browser). Módulo `template` só busca em `templates/`, não em `files/` — por isso ficam num diretório separado (`dakota-fprintd-override.conf.j2` é a exceção: referenciado por caminho absoluto em `playbooks/dakota/libfprint.yml`, já que aquele playbook não mora em `playbooks/`) |
 | `group_vars/all/main.yml` | Variáveis públicas de todas as automações (IDs de Flatpak, nome do tap, casks, caminhos, alvos do KeePassXC-Browser, vars do libfprint no Dakota) |
 | `group_vars/all/local_users.yml.example` | Template dos usuários adicionais (copie para `local_users.yml`) |
 | `group_vars/all/local_users.yml` | Dados reais dos usuários adicionais — local, fora do git    |

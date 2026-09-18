@@ -1,11 +1,13 @@
 # {{ ansible_managed }}
 # Faz o fprintd.service carregar o build goodix538d do libfprint a partir
-# de /usr/local, sem tocar no LD_LIBRARY_PATH global do sistema
-# (/etc/ld.so.conf) nem em /usr. Portado de
+# de /var/usrlocal (no Dakota, ao contrário do OSTree clássico,
+# /usr/local NÃO é gravável — veja o cabeçalho de
+# playbooks/dakota/libfprint.yml), sem tocar no LD_LIBRARY_PATH global do
+# sistema (/etc/ld.so.conf) nem em /usr. Portado de
 # external/bluefin-distrobox-libfprint/templates/fprintd-override.conf.j2
 # — mesmo raciocínio (ProtectHome=true esconde /home/linuxbrew do sandbox
 # do fprintd.service; as .so do Homebrew que o SIGFM matcher precisa são
-# vendorizadas em /usr/local/lib64 junto do libfprint em vez de apontar
-# para lá — veja playbooks/dakota/libfprint.yml).
+# vendorizadas em /var/usrlocal/lib64 junto do libfprint em vez de
+# apontar para lá).
 [Service]
 Environment=LD_LIBRARY_PATH={{ dakota_libfprint_usrlocal_libdir }}

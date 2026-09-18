@@ -17,7 +17,7 @@
 # ENV{PRODUCT}=="1050/*" (qualquer produto do vendor Yubico), em vez do
 # produto específico "1050/407" hardcoded lá — cobre qualquer modelo de
 # YubiKey que o usuário conecte. Ver o cabeçalho de
-# playbooks/files/keepassxc-yubikey-lock.rules.j2 para detalhes.
+# playbooks/templates/keepassxc-yubikey-lock.rules.j2 para detalhes.
 #
 # Segundo bloco (tag keepassxc-browser): ponte de native messaging entre o
 # Flatpak do KeePassXC e os Flatpaks dos navegadores, para a extensão
@@ -76,6 +76,12 @@
       become: true
       tags: keepassxc-yubikey-lock
       block:
+        - name: Garantir que o diretório de destino do script existe
+          ansible.builtin.file:
+            path: "{{ keepassxc_yubikey_lock_script_dest | dirname }}"
+            state: directory
+            mode: "0755"
+
         - name: Instalar o script de travamento via D-Bus
           ansible.builtin.copy:
             src: keepassxc-yubikey-lock.sh
@@ -158,6 +164,10 @@
           {{ ansible_facts.env.HOME }}/.var/app/{{ item.item.flatpak_id }}/{{
           '.mozilla/native-messaging-hosts' if item.item.kind == 'firefox'
           else 'config/' + item.item.vendor_dir + '/NativeMessagingHosts' }}
+        # Nome de var limpo pro template — dentro do .j2, "item" seria o
+        # item do loop desta TASK (o resultado do precheck, com o alvo
+        # de verdade em item.item), não o alvo diretamente.
+        keepassxc_browser_kind: "{{ item.item.kind }}"
       tags: keepassxc-browser
 
     - name: Conceder talk-name org.freedesktop.Flatpak ao navegador (permite flatpak-spawn --host)
