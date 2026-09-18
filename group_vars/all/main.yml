@@ -74,7 +74,18 @@ kanata_systemd_unit: /etc/systemd/system/kanata.service
 # Requer o KeePassXC já instalado (fora do escopo desta automação — veja
 # playbooks/keepassxc.yml) com a integração D-Bus habilitada (ativa por
 # padrão).
-keepassxc_yubikey_lock_script_dest: /usr/local/bin/keepassxc-yubikey-lock.sh
+#
+# /var/usrlocal, não /usr/local: no Dakota (composefs-oci via bootc),
+# /usr/local NÃO é gravável — é um diretório real embutido na imagem
+# somente-leitura de /usr, ao contrário do OSTree clássico, onde
+# /usr/local é o symlink gravável para /var/usrlocal (mesmo achado do
+# playbooks/dakota/libfprint.yml). Como o script é só referenciado pelo
+# caminho absoluto no RUN+= da regra udev — não precisa estar num
+# diretório específico que algum outro programa procure —, apontar
+# direto para /var/usrlocal/bin funciona igual nos dois sistemas: no
+# Fedora Atomic é o mesmo arquivo físico de /usr/local/bin (symlink),
+# no Dakota é o único lugar gravável.
+keepassxc_yubikey_lock_script_dest: /var/usrlocal/bin/keepassxc-yubikey-lock.sh
 keepassxc_yubikey_lock_udev_rule_dest: /etc/udev/rules.d/70-keepassxc-yubikey-lock.rules
 
 # KeePassXC — ponte de native messaging entre o Flatpak do KeePassXC e os
@@ -108,7 +119,15 @@ keepassxc_native_messaging_targets:
 # playbooks/dakota/libfprint.yml (sem depender do submódulo
 # external/bluefin-distrobox-libfprint, que é rotulado para Fedora
 # Atomic). Mesmas fontes e estratégia do submódulo: compilar num
-# container distrobox descartável, instalar só em /usr/local.
+# container distrobox descartável, instalar só num prefixo gravável.
+#
+# ATENÇÃO — verificado em hardware real: ao contrário do OSTree clássico
+# (onde /usr/local é um symlink para /var/usrlocal, logo gravável), no
+# Dakota (backend composefs-oci via bootc) /usr/local é um diretório de
+# verdade embutido na imagem somente-leitura de /usr — grava lá falha com
+# "Read-only file system". /var/usrlocal existe na imagem (gravável, no
+# /var em btrfs), mas não é ligado a /usr/local por nenhum fstab/unit —
+# por isso instalamos ali diretamente em vez de em /usr/local.
 dakota_libfprint_container_name: libfprint-build
 dakota_libfprint_distrobox_ini_file: "{{ inventory_dir }}/playbooks/files/dakota-libfprint-distrobox.ini"
 dakota_libfprint_opencv_formula: opencv@4
@@ -116,5 +135,5 @@ dakota_libfprint_repo: https://github.com/lbssousa/libfprint.git
 dakota_libfprint_ref: goodix-538d-sigfm-gtls
 dakota_libfprint_checkout_dir: "{{ ansible_facts.env.HOME }}/src/libfprint-goodix538d"
 dakota_libfprint_stage_dir: "{{ ansible_facts.env.HOME }}/src/libfprint-goodix538d-stage"
-dakota_libfprint_usrlocal_prefix: /usr/local
+dakota_libfprint_usrlocal_prefix: /var/usrlocal
 dakota_libfprint_usrlocal_libdir: "{{ dakota_libfprint_usrlocal_prefix }}/lib64"

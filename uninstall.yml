@@ -131,7 +131,7 @@
       changed_when: true
       tags: [keepassxc-browser]
 
-- name: libfprint (goodix538d) no Dakota — remover o install em /usr/local e o wiring do fprintd
+- name: libfprint (goodix538d) no Dakota — remover o install em /var/usrlocal e o wiring do fprintd
   hosts: localhost
   connection: local
   gather_facts: true
@@ -200,7 +200,7 @@
       loop: "{{ vendored_brew_libs.files }}"
       tags: [libfprint-dakota]
 
-    - name: Remover o conjunto de regras de contexto SELinux de /usr/local/lib64
+    - name: Remover o conjunto de regras de contexto SELinux de /var/usrlocal/lib64
       community.general.sefcontext:
         target: "{{ dakota_libfprint_usrlocal_libdir }}(/.*)?"
         setype: lib_t
