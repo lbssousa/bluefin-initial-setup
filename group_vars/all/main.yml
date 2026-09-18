@@ -137,3 +137,18 @@ dakota_libfprint_checkout_dir: "{{ ansible_facts.env.HOME }}/src/libfprint-goodi
 dakota_libfprint_stage_dir: "{{ ansible_facts.env.HOME }}/src/libfprint-goodix538d-stage"
 dakota_libfprint_usrlocal_prefix: /var/usrlocal
 dakota_libfprint_usrlocal_libdir: "{{ dakota_libfprint_usrlocal_prefix }}/lib64"
+
+# Bash — autocomplete case-insensitive e history-substring-search
+# (~/.inputrc, recursos nativos do GNU Readline, funcionam com ou sem
+# ble.sh) + ble.sh (syntax highlighting e autosuggestions, estilo
+# Fish/zsh-autosuggestions, integrado no ~/.bashrc). Veja
+# playbooks/bash.yml. ble.sh não tem formula no Homebrew — compilado a
+# partir do código-fonte (make install), só precisa de make/gawk (também
+# via Homebrew) no momento do build.
+blesh_repo: https://github.com/akinomyoga/ble.sh.git
+blesh_build_deps:
+  - make
+  - gawk
+blesh_src_dir: "{{ ansible_facts.env.HOME }}/.local/share/ble.sh-src"
+blesh_install_prefix: "{{ ansible_facts.env.HOME }}/.local"
+blesh_entry: "{{ ansible_facts.env.HOME }}/.local/share/blesh/ble.sh"

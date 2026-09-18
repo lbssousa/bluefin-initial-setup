@@ -62,6 +62,9 @@ keepassxc-yubikey-lock: _ensure-collections
 keepassxc-browser: _ensure-collections
     ansible-playbook site.yml --ask-become-pass --tags keepassxc-browser
 
+bash: _ensure-collections
+    ansible-playbook site.yml --ask-become-pass --tags bash
+
 # Bluefin Dakota — same automations via site-dakota.yml (no submodule
 # needed there). YubiKey and libfprint use their own Dakota-specific
 # playbooks under playbooks/dakota/ (no authselect/RPMs on Dakota);
@@ -104,3 +107,6 @@ keepassxc-yubikey-lock-dakota: _ensure-collections
 
 keepassxc-browser-dakota: _ensure-collections
     ansible-playbook site-dakota.yml --ask-become-pass --tags keepassxc-browser
+
+bash-dakota: _ensure-collections
+    ansible-playbook site-dakota.yml --ask-become-pass --tags bash

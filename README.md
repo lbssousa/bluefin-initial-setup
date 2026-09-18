@@ -166,6 +166,28 @@ própria tag: rode só uma com `--tags <tag>`, ou pule uma com
     (mesmo raciocínio do `pam-u2f` no item YubiKey acima): pressupõem o
     app já instalado, com a integração D-Bus habilitada (ativa por
     padrão em Ferramentas → Configurações → Geral).
+11. **Bash com cara de Fish** (`playbooks/bash.yml`, tag guarda-chuva `bash`) — dois blocos
+    independentes, cada um com sua própria sub-tag:
+    - `bash-completion` — autocomplete case-insensitive
+      (`completion-ignore-case`) e history-substring-search (setas
+      cima/baixo filtram o histórico pelo que já foi digitado, igual ao
+      plugin `zsh-history-substring-search`), via `~/.inputrc`. Recursos
+      nativos do GNU Readline — não dependem do ble.sh abaixo.
+    - `blesh` — instala o [ble.sh](https://github.com/akinomyoga/ble.sh)
+      ("Bash Line Editor"), que reescreve a edição de linha do Bash e
+      traz, de fábrica, *syntax highlighting* e *autosuggestions*
+      (sugestão em cinza a partir do histórico enquanto você digita,
+      aceita com End/→) — o equivalente mais próximo pro Bash de
+      `zsh-syntax-highlighting` + `zsh-autosuggestions` (ou do próprio
+      Fish) que existe. Sem *formula* no Homebrew (projeto 100% Bash,
+      sem binário pra publicar): compilado a partir do código-fonte via
+      `make install`, usando `make`/`gawk` (esses sim via Homebrew) só
+      no momento do build. `~/.bashrc` e `~/.inputrc` são editados de
+      forma não-destrutiva (`lineinfile`/`blockinfile` com marcador
+      próprio), não criados/sobrescritos só se ainda não existirem —
+      diferente do Neovim/Zed/kanata, aqui o objetivo é garantir que as
+      linhas específicas existam dentro de um arquivo que o usuário já
+      tem e continua controlando o resto.
 
 Mais automações devem ser adicionadas a este repositório com o tempo.
 
@@ -346,6 +368,7 @@ ainda não estiver no estado desejado.
 | `playbooks/neovim.yml`    | Neovim + LazyVim (tag `neovim`)                                  |
 | `playbooks/capslock.yml`  | Caps Lock via kanata (tag `capslock`)                            |
 | `playbooks/keepassxc.yml` | KeePassXC — trava ao remover a YubiKey + ponte de native messaging (tags `keepassxc-yubikey-lock`/`keepassxc-browser`) |
+| `playbooks/bash.yml`      | Bash com cara de Fish — completion case-insensitive + history-substring-search + ble.sh (tags `bash-completion`/`blesh`) |
 | `playbooks/dakota/yubikey.yml`   | YubiKey no Dakota — só `yubikey-setup-pcscd` + `yubikey-gpg-import`, sem PAM |
 | `playbooks/dakota/libfprint.yml` | libfprint no Dakota — build/install autocontidos, sem o submódulo |
 | `playbooks/files/`        | Arquivos estáticos copiados como estão via `copy` (unidades systemd, polkit action, environment.d, script wrapper do KeePassXC-Browser, distrobox.ini do libfprint no Dakota) — compartilhado pelos playbooks acima |

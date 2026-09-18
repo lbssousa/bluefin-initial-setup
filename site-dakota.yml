@@ -8,8 +8,8 @@
 # playbooks/dakota/ e a seção "Bluefin Dakota" do README para detalhes.
 #
 # Todos os outros playbooks (bitwarden, zed, users, printer, neovim,
-# capslock, keepassxc) são os MESMOS arquivos usados por site.yml — não
-# precisam de nenhuma adaptação para o Dakota.
+# capslock, keepassxc, bash) são os MESMOS arquivos usados por site.yml
+# — não precisam de nenhuma adaptação para o Dakota.
 #
 # NÃO importa playbooks/homebrew.yml (tap ublue-os + casks do VSCode/Zed):
 # no Dakota, a instalação do VSCode e do Zed já é gerenciada pelo `ujust`
@@ -63,3 +63,9 @@
   # selecionável isoladamente com sua própria tag.
   ansible.builtin.import_playbook: playbooks/keepassxc.yml
   tags: [keepassxc]
+
+- name: Bash — completion case-insensitive, history-substring-search e ble.sh
+  # tag guarda-chuva "bash": roda os dois blocos do playbook
+  # (bash-completion, blesh); cada um também é selecionável isoladamente.
+  ansible.builtin.import_playbook: playbooks/bash.yml
+  tags: [bash]
