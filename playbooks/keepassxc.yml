@@ -18,7 +18,19 @@
 # produto específico "1050/407" hardcoded lá — cobre qualquer modelo de
 # YubiKey que o usuário conecte. Ver o cabeçalho de
 # playbooks/files/keepassxc-yubikey-lock.rules.j2 para detalhes.
-- name: KeePassXC — travar ao remover a YubiKey (udev + D-Bus)
+#
+# Segundo bloco (tag keepassxc-browser): ponte de native messaging entre o
+# Flatpak do KeePassXC e os Flatpaks dos navegadores, para a extensão
+# KeePassXC-Browser funcionar. Cada Flatpak só enxerga o próprio
+# diretório de dados (~/.var/app/<id>/...) e não consegue spawnar
+# diretamente um processo de outro Flatpak — por isso o manifesto de
+# native messaging e um script wrapper são instalados DENTRO do
+# diretório do navegador (visível ao sandbox dele mesmo), e o wrapper usa
+# flatpak-spawn --host para rodar o keepassxc-proxy do Flatpak do
+# KeePassXC no host. As duas tags (keepassxc-yubikey-lock,
+# keepassxc-browser) são independentes; site.yml importa este arquivo com
+# a tag guarda-chuva `keepassxc`, que roda os dois.
+- name: KeePassXC — travar ao remover a YubiKey + ponte de native messaging
   hosts: localhost
   connection: local
   gather_facts: true
@@ -29,12 +41,14 @@
       register: keepassxc_flatpak_check
       changed_when: false
       failed_when: false
+      tags: always
 
     - name: Verificar se o KeePassXC está instalado (binário no PATH)
       ansible.builtin.command: which keepassxc
       register: keepassxc_bin_check
       changed_when: false
       failed_when: false
+      tags: always
 
     - name: Falhar com orientação se o KeePassXC não for encontrado
       ansible.builtin.fail:
@@ -45,10 +59,22 @@
           Configurações > Geral > "Habilitar integração com D-Bus"
           (ativa por padrão).
       when: keepassxc_flatpak_check.rc != 0 and keepassxc_bin_check.rc != 0
+      tags: always
+
+    - name: Verificar quais navegadores Flatpak suportados estão instalados
+      ansible.builtin.command: flatpak info {{ item.flatpak_id }}
+      register: keepassxc_browser_precheck
+      changed_when: false
+      failed_when: false
+      loop: "{{ keepassxc_native_messaging_targets }}"
+      loop_control:
+        label: "{{ item.flatpak_id }}"
+      tags: keepassxc-browser
 
   tasks:
     - name: KeePassXC — travar ao remover a YubiKey
       become: true
+      tags: keepassxc-yubikey-lock
       block:
         - name: Instalar o script de travamento via D-Bus
           ansible.builtin.copy:
@@ -68,6 +94,81 @@
           notify:
             - reload udev rules
             - trigger udev
+
+    # Um `block` não aceita `loop` diretamente em Ansible — por isso os
+    # atributos loop/when/vars/tags abaixo são repetidos em cada task
+    # individual, em vez de um block único.
+    - name: Garantir que o diretório de dados do navegador existe (native messaging)
+      ansible.builtin.file:
+        path: "{{ keepassxc_proxy_host_dest | dirname }}"
+        state: directory
+        mode: "0755"
+      loop: "{{ keepassxc_browser_precheck.results }}"
+      loop_control:
+        label: "{{ item.item.flatpak_id }}"
+      when: item.rc == 0
+      vars:
+        keepassxc_proxy_host_dest: >-
+          {{ ansible_facts.env.HOME }}/.var/app/{{ item.item.flatpak_id }}/data/keepassxc-proxy-host
+      tags: keepassxc-browser
+
+    - name: Instalar o wrapper flatpak-spawn (keepassxc-proxy-host)
+      ansible.builtin.copy:
+        src: keepassxc-proxy-host.sh
+        dest: "{{ keepassxc_proxy_host_dest }}"
+        mode: "0755"
+      loop: "{{ keepassxc_browser_precheck.results }}"
+      loop_control:
+        label: "{{ item.item.flatpak_id }}"
+      when: item.rc == 0
+      vars:
+        keepassxc_proxy_host_dest: >-
+          {{ ansible_facts.env.HOME }}/.var/app/{{ item.item.flatpak_id }}/data/keepassxc-proxy-host
+      tags: keepassxc-browser
+
+    - name: Garantir que o diretório de native messaging hosts do navegador existe
+      ansible.builtin.file:
+        path: "{{ keepassxc_native_messaging_dir }}"
+        state: directory
+        mode: "0755"
+      loop: "{{ keepassxc_browser_precheck.results }}"
+      loop_control:
+        label: "{{ item.item.flatpak_id }}"
+      when: item.rc == 0
+      vars:
+        keepassxc_native_messaging_dir: >-
+          {{ ansible_facts.env.HOME }}/.var/app/{{ item.item.flatpak_id }}/{{
+          '.mozilla/native-messaging-hosts' if item.item.kind == 'firefox'
+          else 'config/' + item.item.vendor_dir + '/NativeMessagingHosts' }}
+      tags: keepassxc-browser
+
+    - name: Instalar o manifesto de native messaging do KeePassXC-Browser
+      ansible.builtin.template:
+        src: org.keepassxc.keepassxc_browser.json.j2
+        dest: "{{ keepassxc_native_messaging_dir }}/{{ keepassxc_native_messaging_manifest_name }}"
+        mode: "0644"
+      loop: "{{ keepassxc_browser_precheck.results }}"
+      loop_control:
+        label: "{{ item.item.flatpak_id }}"
+      when: item.rc == 0
+      vars:
+        keepassxc_proxy_host_dest: >-
+          {{ ansible_facts.env.HOME }}/.var/app/{{ item.item.flatpak_id }}/data/keepassxc-proxy-host
+        keepassxc_native_messaging_dir: >-
+          {{ ansible_facts.env.HOME }}/.var/app/{{ item.item.flatpak_id }}/{{
+          '.mozilla/native-messaging-hosts' if item.item.kind == 'firefox'
+          else 'config/' + item.item.vendor_dir + '/NativeMessagingHosts' }}
+      tags: keepassxc-browser
+
+    - name: Conceder talk-name org.freedesktop.Flatpak ao navegador (permite flatpak-spawn --host)
+      ansible.builtin.command: >-
+        flatpak override --user --talk-name=org.freedesktop.Flatpak {{ item.item.flatpak_id }}
+      loop: "{{ keepassxc_browser_precheck.results }}"
+      loop_control:
+        label: "{{ item.item.flatpak_id }}"
+      when: item.rc == 0
+      changed_when: true
+      tags: keepassxc-browser
 
   handlers:
     - name: reload udev rules

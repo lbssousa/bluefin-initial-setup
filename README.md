@@ -4,6 +4,9 @@ Automação (Ansible) para o setup inicial de um desktop Fedora Atomic
 (Bluefin, uBlue, Silverblue, Kinoite...) recém-instalado, **sem usar
 `rpm-ostree install`** em nenhum momento — só Flatpak, Homebrew (linuxbrew)
 e arquivos de configuração graváveis (`~/.config`, `/usr/local`, `/etc`).
+Também cobre o [Bluefin Dakota](https://docs.projectbluefin.io/dakota/)
+(GNOME OS, sem RPMs/`rpm-ostree`) via `site-dakota.yml` — veja a seção
+["Bluefin Dakota"](#bluefin-dakota) abaixo.
 
 Cada automação é um playbook próprio em `playbooks/` (ou um submódulo git
 em `external/`), importado por `site.yml` via `ansible.builtin.import_playbook`
@@ -13,7 +16,8 @@ própria tag: rode só uma com `--tags <tag>`, ou pule uma com
 
 ## O que este playbook faz
 
-1. **Bitwarden** (`playbooks/bitwarden.yml`, tag `bitwarden`) — instala o Flatpak (`com.bitwarden.desktop`, via Flathub)
+1. **Bitwarden** (`playbooks/bitwarden.yml`, tag `bitwarden`, **não roda por padrão** — tag `never`,
+   só sob pedido explícito: `--tags bitwarden` / `just bitwarden` / `just bitwarden-dakota`) — instala o Flatpak (`com.bitwarden.desktop`, via Flathub)
    e aplica a configuração de referência do
    [lbssousa/dotfiles](https://github.com/lbssousa/dotfiles):
    - **Agente SSH**: liga `SSH_AUTH_SOCK` ao socket do agente SSH do
@@ -131,20 +135,37 @@ própria tag: rode só uma com `--tags <tag>`, ou pule uma com
    (`modules/system/core/localization.nix`). Mesmo raciocínio do Neovim
    e do Zed acima: `~/.config/kanata/kanata.kbd` só é copiado se ainda
    não existir, nunca sobrescrito.
-10. **KeePassXC — travar ao remover a YubiKey** (`playbooks/keepassxc.yml`, tag
-    `keepassxc-yubikey-lock`) — instala uma regra udev que trava todas
-    as bases do KeePassXC (via D-Bus,
-    `org.keepassxc.KeePassXC.MainWindow.lockAllDatabases`) sempre que a
-    YubiKey é desconectada da porta USB. **A instalação do KeePassXC
-    fica fora do escopo** (mesmo raciocínio do `pam-u2f` no item
-    YubiKey acima): pressupõe o app já instalado, com a integração
-    D-Bus habilitada (ativa por padrão em Ferramentas → Configurações →
-    Geral). A regra casa qualquer YubiKey pelo vendor ID da Yubico
-    (`1050`), não um modelo específico — desvio proposital da
-    configuração de referência em
-    [lbssousa/nix-config](https://github.com/lbssousa/nix-config)
-    (`modules/system/security/keepassxc-yubikey-lock.nix`), que trava
-    num único modelo.
+10. **KeePassXC** (`playbooks/keepassxc.yml`, tag guarda-chuva `keepassxc`) — dois blocos independentes,
+    cada um com sua própria sub-tag:
+    - `keepassxc-yubikey-lock` — instala uma regra udev que trava todas
+      as bases do KeePassXC (via D-Bus,
+      `org.keepassxc.KeePassXC.MainWindow.lockAllDatabases`) sempre que a
+      YubiKey é desconectada da porta USB. A regra casa qualquer YubiKey
+      pelo vendor ID da Yubico (`1050`), não um modelo específico —
+      desvio proposital da configuração de referência em
+      [lbssousa/nix-config](https://github.com/lbssousa/nix-config)
+      (`modules/system/security/keepassxc-yubikey-lock.nix`), que trava
+      num único modelo.
+    - `keepassxc-browser` — ponte de *native messaging* entre o Flatpak
+      do KeePassXC e os Flatpaks dos navegadores suportados (Firefox,
+      Chrome, Brave, Chromium, Edge — lista em
+      `keepassxc_native_messaging_targets` em `group_vars/all/main.yml`),
+      para a extensão [KeePassXC-Browser](https://github.com/keepassxreboot/keepassxc-browser)
+      funcionar. Cada Flatpak só enxerga o próprio diretório de dados
+      (`~/.var/app/<id>/...`) e não consegue spawnar diretamente um
+      processo de outro Flatpak; por isso instala, DENTRO do diretório
+      de dados de cada navegador já instalado, um manifesto de native
+      messaging e um script wrapper que usa `flatpak-spawn --host` para
+      rodar o `keepassxc-proxy` do Flatpak do KeePassXC no host, e
+      concede a permissão `--talk-name=org.freedesktop.Flatpak`
+      necessária para isso. Roda igual no Fedora e no Dakota (mecanismo
+      100% Flatpak/D-Bus, independente da base do sistema) — ainda não
+      validado em hardware real.
+
+    **A instalação do KeePassXC fica fora do escopo** dos dois blocos
+    (mesmo raciocínio do `pam-u2f` no item YubiKey acima): pressupõem o
+    app já instalado, com a integração D-Bus habilitada (ativa por
+    padrão em Ferramentas → Configurações → Geral).
 
 Mais automações devem ser adicionadas a este repositório com o tempo.
 
@@ -155,6 +176,63 @@ Mais automações devem ser adicionadas a este repositório com o tempo.
 > existirem — se já forem symlinks criados pelo `stow` desse repositório,
 > o Ansible não mexe neles (`force: false`, veja `playbooks/bitwarden.yml`).
 > É seguro rodar os dois na mesma máquina.
+
+## Bluefin Dakota
+
+O [Bluefin Dakota](https://docs.projectbluefin.io/dakota/) é uma base
+radicalmente diferente do Bluefin/uBlue clássico: GNOME OS compilado via
+Apache BuildStream, publicado como imagem `bootc` sobre backend
+**composefs-oci** — **sem RPMs, sem `rpm-ostree`, sem `authselect`** (a
+ferramenta do stack Fedora/RHEL que `playbooks/yubikey.yml` usa para
+PAM). Ainda em alpha. Por isso existe `site-dakota.yml`, espelhando
+`site.yml` tag por tag, com duas diferenças:
+
+- **YubiKey** (`playbooks/dakota/yubikey.yml`) — sem `authselect` no
+  Dakota (e sem substituto documentado ainda), este arquivo **não mexe
+  em PAM**. Mantém só o que é OS-agnóstico: o fix de race condition do
+  `pcscd` (tag `yubikey-setup-pcscd`) e uma tarefa nova, `yubikey-gpg-import`,
+  que importa a chave pública OpenPGP do cartão da YubiKey
+  (`gpg --card-status` + `gpg --edit-card fetch`) para o keyring local.
+  As etapas de PAM/authselect de `playbooks/yubikey.yml`
+  (`yubikey-enroll`, `yubikey-setup-pam`, `yubikey-mode-replace`,
+  `yubikey-mode-2fa`, `yubikey-test`, `yubikey-reset`) **não têm
+  equivalente no Dakota por enquanto**.
+- **libfprint** (`playbooks/dakota/libfprint.yml`) — build e instalação
+  autocontidos neste repositório, sem depender do submódulo
+  `external/bluefin-distrobox-libfprint` (cujo README fala
+  explicitamente de "desktop Fedora Atomic"). Mesma estratégia (compilar
+  o fork [lbssousa/libfprint](https://github.com/lbssousa/libfprint) num
+  container distrobox descartável — `playbooks/files/dakota-libfprint-distrobox.ini`
+  — e instalar só em `/usr/local`, gravável tanto em rpm-ostree quanto
+  no bootc/composefs-oci do Dakota), reimplementada para não depender de
+  um repositório rotulado para Fedora.
+
+Todos os outros playbooks (`zed`, `users`, `printer`, `neovim`,
+`capslock`, `keepassxc`, e o próprio `bitwarden`, que também não roda
+por padrão no Dakota) são os **mesmos arquivos** usados pelo `site.yml`
+clássico — Homebrew e Podman já vêm pré-instalados nas imagens Dakota,
+então nenhuma adaptação de conteúdo foi necessária.
+
+`site-dakota.yml` **não importa** `playbooks/homebrew.yml` (tag
+`homebrew`, sem receita `homebrew-dakota` correspondente): no Dakota, a
+instalação do VSCode e do Zed já é gerenciada pelo `ujust` da própria
+imagem, então esse playbook (tap `ublue-os` + casks do VSCode/Zed) seria
+redundante ali. `playbooks/zed.yml` continua rodando normalmente — ele
+só configura o Podman como runtime de dev containers do Zed
+(`~/.config/zed/settings.json`), não instala o app.
+
+```bash
+just setup-dakota                    # tudo, exceto Bitwarden — como o `just setup` clássico
+just <tag>-dakota                    # uma automação isolada, ex.: just libfprint-dakota
+ansible-playbook site-dakota.yml --ask-become-pass --tags yubikey-gpg-import
+```
+
+Não depende do submódulo git (`external/bluefin-distrobox-libfprint`) —
+o libfprint no Dakota é autocontido. **Nada aqui foi validado em
+hardware Dakota real ainda** (o Dakota é alpha e a documentação oficial
+ainda não cobre CUPS, `accountsservice`, `fprintd` ou o layout completo
+de `/etc` nessa imagem); trate como ponto de partida a testar, não como
+garantia.
 
 ## Desinstalação
 
@@ -170,11 +248,15 @@ Cobre a remoção da polkit action do Bitwarden (equivalente ao antigo
 `bitwarden/uninstall.sh` do
 [lbssousa/dotfiles](https://github.com/lbssousa/dotfiles), que agora
 invoca este playbook em vez de um script próprio), do serviço/unidade
-systemd do kanata (tag `capslock`) e da regra udev/script do
-KeePassXC (tag `keepassxc-yubikey-lock`) — em ambos os casos, sem
-remover a config pessoal (`kanata.kbd`) nem desinstalar pacotes via
-Homebrew. Mais automações de desinstalação devem ser adicionadas aqui
-com o tempo.
+systemd do kanata (tag `capslock`), da regra udev/script do
+KeePassXC (tag `keepassxc-yubikey-lock`), da ponte de native messaging
+do KeePassXC com os navegadores Flatpak (tag `keepassxc-browser` —
+remove o manifesto, o wrapper e a permissão `talk-name` concedida a
+cada navegador) e, no Dakota, do install em `/usr/local` +
+`fprintd.service` do libfprint (tag `libfprint-dakota`) — em todos os
+casos, sem remover a config pessoal (`kanata.kbd`) nem desinstalar
+pacotes via Homebrew. Mais automações de desinstalação devem ser
+adicionadas aqui com o tempo.
 
 ## Dados privados (usuários adicionais)
 
@@ -247,25 +329,28 @@ ainda não estiver no estado desejado.
 
 | Arquivo/Diretório      | Papel                                                          |
 |-------------------------|-----------------------------------------------------------------|
-| `site.yml`               | Índice: importa cada `playbooks/*.yml` com sua tag              |
+| `site.yml`               | Índice: importa cada `playbooks/*.yml` com sua tag (Fedora Atomic clássico) |
+| `site-dakota.yml`        | Mesmo índice para o Bluefin Dakota — veja a seção "Bluefin Dakota" acima |
 | `uninstall.yml`          | Desinstalação — playbook independente, tags por automação        |
-| `playbooks/bitwarden.yml` | Bitwarden — Flatpak + agente SSH + polkit (tag `bitwarden`)     |
+| `playbooks/bitwarden.yml` | Bitwarden — Flatpak + agente SSH + polkit (tag `bitwarden`, não roda por padrão) |
 | `playbooks/homebrew.yml`  | Tap `ublue-os` + VSCode/Zed (tag `homebrew`)                    |
 | `playbooks/zed.yml`       | Podman como runtime de dev containers no Zed (tag `zed`)         |
-| `playbooks/yubikey.yml`   | YubiKey FIDO2/U2F — etapas selecionáveis (tags `yubikey-*`)      |
+| `playbooks/yubikey.yml`   | YubiKey FIDO2/U2F — etapas selecionáveis (tags `yubikey-*`), Fedora/authselect |
 | `playbooks/users.yml`     | Usuários adicionais (tag `users`)                                |
 | `playbooks/printer.yml`   | Impressora EPSON L4160 driverless (tag `printer`)                |
 | `playbooks/neovim.yml`    | Neovim + LazyVim (tag `neovim`)                                  |
 | `playbooks/capslock.yml`  | Caps Lock via kanata (tag `capslock`)                            |
-| `playbooks/keepassxc.yml` | KeePassXC — trava ao remover a YubiKey (tag `keepassxc-yubikey-lock`) |
-| `playbooks/files/`        | Arquivos estáticos copiados como estão (unidades systemd, polkit action, environment.d) — compartilhado pelos playbooks acima |
-| `group_vars/all/main.yml` | Variáveis públicas de todas as automações (IDs de Flatpak, nome do tap, casks, caminhos) |
+| `playbooks/keepassxc.yml` | KeePassXC — trava ao remover a YubiKey + ponte de native messaging (tags `keepassxc-yubikey-lock`/`keepassxc-browser`) |
+| `playbooks/dakota/yubikey.yml`   | YubiKey no Dakota — só `yubikey-setup-pcscd` + `yubikey-gpg-import`, sem PAM |
+| `playbooks/dakota/libfprint.yml` | libfprint no Dakota — build/install autocontidos, sem o submódulo |
+| `playbooks/files/`        | Arquivos estáticos copiados como estão (unidades systemd, polkit action, environment.d, manifesto/wrapper do KeePassXC-Browser, distrobox.ini/drop-in do libfprint no Dakota) — compartilhado pelos playbooks acima |
+| `group_vars/all/main.yml` | Variáveis públicas de todas as automações (IDs de Flatpak, nome do tap, casks, caminhos, alvos do KeePassXC-Browser, vars do libfprint no Dakota) |
 | `group_vars/all/local_users.yml.example` | Template dos usuários adicionais (copie para `local_users.yml`) |
 | `group_vars/all/local_users.yml` | Dados reais dos usuários adicionais — local, fora do git    |
 | `requirements.yml`       | Collections Ansible necessárias (`community.general`)           |
-| `external/bluefin-distrobox-libfprint` | Submódulo git com a automação do libfprint (repo separado, tag `libfprint`) |
+| `external/bluefin-distrobox-libfprint` | Submódulo git com a automação do libfprint para Fedora (repo separado, tag `libfprint`) — não usado pelo Dakota |
 | `.gitmodules`             | Declaração do submódulo acima                                    |
-| `Justfile`               | Atalhos (`just setup`, `just setup-no-libfprint`)                |
+| `Justfile`               | Atalhos (`just setup`, `just setup-dakota`, `just <tag>`/`just <tag>-dakota` por automação) |
 
 ## Créditos
 

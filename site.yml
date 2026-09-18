@@ -11,8 +11,10 @@
 # Uso: ansible-playbook site.yml --ask-become-pass
 # (requer o submódulo git inicializado: git submodule update --init)
 - name: Bitwarden — Flatpak + agente SSH + polkit (desbloqueio biométrico)
+  # tag "never": não roda em `ansible-playbook site.yml` sem --tags —
+  # só sob pedido explícito (--tags bitwarden / `just bitwarden`).
   ansible.builtin.import_playbook: playbooks/bitwarden.yml
-  tags: [bitwarden]
+  tags: [bitwarden, never]
 
 - name: Homebrew tap ublue-os + VSCode/Zed
   ansible.builtin.import_playbook: playbooks/homebrew.yml
@@ -46,6 +48,9 @@
   ansible.builtin.import_playbook: playbooks/capslock.yml
   tags: [capslock]
 
-- name: KeePassXC — travar ao remover a YubiKey
+- name: KeePassXC — travar ao remover a YubiKey + ponte de native messaging
+  # tag guarda-chuva "keepassxc": roda os dois blocos do playbook
+  # (keepassxc-yubikey-lock, keepassxc-browser); cada um também é
+  # selecionável isoladamente com sua própria tag.
   ansible.builtin.import_playbook: playbooks/keepassxc.yml
-  tags: [keepassxc-yubikey-lock]
+  tags: [keepassxc]

@@ -1,0 +1,152 @@
+---
+# YubiKey no Bluefin Dakota — versão de escopo reduzido de
+# playbooks/yubikey.yml.
+#
+# O Dakota é GNOME OS (não Fedora/RHEL) — não tem `authselect`, a
+# ferramenta que playbooks/yubikey.yml usa para trocar/reforçar o PAM
+# (login/sudo), e não há (ainda) um substituto documentado. Por isso,
+# DELIBERADAMENTE FICAM DE FORA deste arquivo: `yubikey-setup-pam`,
+# `yubikey-mode-replace`, `yubikey-mode-2fa`, `yubikey-test`,
+# `yubikey-reset`, o registro U2F/FIDO2 (`yubikey-enroll`, que só faz
+# sentido como insumo do PAM via pam-u2f) e a checagem de pacote
+# `rpm -q pam-u2f` (Dakota não tem banco RPM).
+#
+# O que continua fazendo sentido aqui, por ser genérico o bastante:
+#   - yubikey-setup-pcscd: mesmo drop-in systemd de
+#     playbooks/yubikey.yml, evita uma race condition entre pcscd e udev
+#     no boot — nada específico de Fedora.
+#   - yubikey-gpg-import (NOVO): importa a chave pública OpenPGP do
+#     cartão da YubiKey (gpg --card-status / --edit-card fetch) para o
+#     keyring local, útil para SSH/assinatura via GPG independente de
+#     qualquer integração com o PAM do sistema. Também configura a
+#     chave importada como `user.signingkey` no git (--global) e liga
+#     `commit.gpgsign`/`tag.gpgsign`, para assinar commits e tags por
+#     padrão com a YubiKey.
+- name: YubiKey no Dakota (pcscd + import da chave GPG, sem PAM)
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  tasks:
+    # ── pcscd — corrige race condition com udev no boot ───────────────
+    - name: pcscd — aguardar udev settle no boot (YubiKey + GPG)
+      tags: [yubikey-setup-pcscd]
+      become: true
+      block:
+        - name: Garantir que o diretório do drop-in do pcscd existe
+          ansible.builtin.file:
+            path: "{{ yubikey_pcscd_dropin | dirname }}"
+            state: directory
+            mode: "0755"
+
+        - name: Instalar o drop-in do pcscd
+          ansible.builtin.copy:
+            content: |
+              [Service]
+              ExecStartPre=/usr/bin/udevadm settle --timeout=5
+            dest: "{{ yubikey_pcscd_dropin }}"
+            mode: "0644"
+          notify:
+            - reload systemd
+            - restart pcscd
+
+    # ── Importar a chave OpenPGP do cartão da YubiKey ──────────────────
+    - name: Importar a chave pública OpenPGP do cartão da YubiKey
+      tags: [yubikey-gpg-import]
+      block:
+        - name: Verificar o cartão OpenPGP da YubiKey (gpg --card-status)
+          ansible.builtin.command: gpg --card-status
+          register: yubikey_card_status
+          changed_when: false
+          failed_when: false
+
+        - name: Falhar com orientação se nenhum cartão OpenPGP for detectado
+          ansible.builtin.fail:
+            msg: >-
+              Nenhum cartão OpenPGP detectado (gpg --card-status falhou).
+              Insira a YubiKey e rode de novo:
+              ansible-playbook site-dakota.yml --ask-become-pass
+              --tags yubikey-gpg-import
+          when: yubikey_card_status.rc != 0
+
+        - name: Extrair o fingerprint da chave de assinatura do cartão
+          # O rótulo do gpg --card-status vem preenchido com pontos até a
+          # coluna do ":" (ex.: "Signature key ....: XXXX..."), não só
+          # espaços — por isso [.\s]* em vez de \s* antes do ":". E o
+          # regex_search com grupo de captura retorna uma LISTA nesta
+          # versão do Ansible (não uma string) — por isso extraímos o
+          # trecho inteiro (label + fingerprint) SEM grupo, e removemos o
+          # label depois com regex_replace, para não depender desse
+          # comportamento.
+          ansible.builtin.set_fact:
+            yubikey_gpg_fingerprint: >-
+              {{ (yubikey_card_status.stdout
+                  | regex_search('Signature key[.\s]*:\s*[0-9A-F ]+')
+                  | default('', true))
+                 | regex_replace('^Signature key[.\s]*:\s*', '')
+                 | replace(' ', '') }}
+          when: yubikey_card_status.rc == 0
+
+        - name: Falhar se não foi possível ler o fingerprint da chave de assinatura
+          ansible.builtin.fail:
+            msg: >-
+              gpg --card-status não trouxe uma "Signature key" legível.
+              Confira `gpg --card-status` manualmente antes de repetir
+              esta automação.
+          when:
+            - yubikey_card_status.rc == 0
+            - yubikey_gpg_fingerprint | default('') | length == 0
+
+        - name: Verificar se a chave já está no keyring local
+          ansible.builtin.command: "gpg --list-keys {{ yubikey_gpg_fingerprint }}"
+          register: yubikey_gpg_list
+          changed_when: false
+          failed_when: false
+          when: yubikey_gpg_fingerprint | default('') | length > 0
+
+        - name: Importar a chave pública do cartão (gpg --edit-card fetch)
+          # --no-tty: sem ele o gpg tenta abrir /dev/tty para o prompt
+          # "gpg>" mesmo pilotado via --command-fd/--status-fd, e falha
+          # rodando sob Ansible (sem terminal de controle). "fetch" não
+          # pede senha/PIN, então não precisa de pinentry.
+          ansible.builtin.shell: echo fetch | gpg --no-tty --command-fd=0 --status-fd=1 --edit-card
+          when: >-
+            yubikey_gpg_fingerprint | default('') | length > 0 and
+            yubikey_gpg_list.rc != 0
+          changed_when: true
+
+        # ── Assinar commits/tags do git com a chave da YubiKey ─────────
+        - name: Configurar a chave de assinatura GPG no git (--global)
+          community.general.git_config:
+            name: user.signingkey
+            scope: global
+            value: "{{ yubikey_gpg_fingerprint }}"
+          when: yubikey_gpg_fingerprint | default('') | length > 0
+
+        - name: Assinar commits automaticamente (git commit.gpgsign)
+          community.general.git_config:
+            name: commit.gpgsign
+            scope: global
+            value: "true"
+          when: yubikey_gpg_fingerprint | default('') | length > 0
+
+        - name: Assinar tags automaticamente (git tag.gpgsign)
+          community.general.git_config:
+            name: tag.gpgsign
+            scope: global
+            value: "true"
+          when: yubikey_gpg_fingerprint | default('') | length > 0
+
+  handlers:
+    - name: reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+      become: true
+      listen: reload systemd
+
+    - name: restart pcscd
+      ansible.builtin.systemd:
+        name: pcscd
+        state: restarted
+      become: true
+      listen: restart pcscd
