@@ -54,3 +54,9 @@
   # selecionável isoladamente com sua própria tag.
   ansible.builtin.import_playbook: playbooks/keepassxc.yml
   tags: [keepassxc]
+
+- name: Bash — completion case-insensitive, history-substring-search e ble.sh
+  # tag guarda-chuva "bash": roda os dois blocos do playbook
+  # (bash-completion, blesh); cada um também é selecionável isoladamente.
+  ansible.builtin.import_playbook: playbooks/bash.yml
+  tags: [bash]
