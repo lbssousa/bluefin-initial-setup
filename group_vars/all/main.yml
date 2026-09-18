@@ -76,3 +76,45 @@ kanata_systemd_unit: /etc/systemd/system/kanata.service
 # padrão).
 keepassxc_yubikey_lock_script_dest: /usr/local/bin/keepassxc-yubikey-lock.sh
 keepassxc_yubikey_lock_udev_rule_dest: /etc/udev/rules.d/70-keepassxc-yubikey-lock.rules
+
+# KeePassXC — ponte de native messaging entre o Flatpak do KeePassXC e os
+# Flatpaks dos navegadores, para a extensão KeePassXC-Browser funcionar.
+# Cada Flatpak só enxerga o próprio diretório de dados
+# (~/.var/app/<id>/...), então o manifesto e o script wrapper são
+# instalados DENTRO do diretório de cada navegador (visível ao sandbox
+# dele mesmo), e o wrapper usa flatpak-spawn --host para rodar o
+# keepassxc-proxy do Flatpak do KeePassXC no host. Veja
+# playbooks/keepassxc.yml para detalhes.
+keepassxc_browser_extension_firefox_id: keepassxc-browser@keepassxc.org
+keepassxc_browser_extension_chrome_id: oboonakemofpalcgghocfoadofidjkkk
+keepassxc_native_messaging_manifest_name: org.keepassxc.keepassxc_browser.json
+keepassxc_native_messaging_targets:
+  - flatpak_id: org.mozilla.firefox
+    kind: firefox
+  - flatpak_id: com.google.Chrome
+    kind: chromium
+    vendor_dir: google-chrome
+  - flatpak_id: com.brave.Browser
+    kind: chromium
+    vendor_dir: BraveSoftware/Brave-Browser
+  - flatpak_id: org.chromium.Chromium
+    kind: chromium
+    vendor_dir: chromium
+  - flatpak_id: com.microsoft.Edge
+    kind: chromium
+    vendor_dir: microsoft-edge
+
+# libfprint (goodix538d) no Bluefin Dakota — build autocontido em
+# playbooks/dakota/libfprint.yml (sem depender do submódulo
+# external/bluefin-distrobox-libfprint, que é rotulado para Fedora
+# Atomic). Mesmas fontes e estratégia do submódulo: compilar num
+# container distrobox descartável, instalar só em /usr/local.
+dakota_libfprint_container_name: libfprint-build
+dakota_libfprint_distrobox_ini_file: "{{ inventory_dir }}/playbooks/files/dakota-libfprint-distrobox.ini"
+dakota_libfprint_opencv_formula: opencv@4
+dakota_libfprint_repo: https://github.com/lbssousa/libfprint.git
+dakota_libfprint_ref: goodix-538d-sigfm-gtls
+dakota_libfprint_checkout_dir: "{{ ansible_facts.env.HOME }}/src/libfprint-goodix538d"
+dakota_libfprint_stage_dir: "{{ ansible_facts.env.HOME }}/src/libfprint-goodix538d-stage"
+dakota_libfprint_usrlocal_prefix: /usr/local
+dakota_libfprint_usrlocal_libdir: "{{ dakota_libfprint_usrlocal_prefix }}/lib64"

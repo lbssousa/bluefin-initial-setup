@@ -1,0 +1,65 @@
+---
+# Setup inicial de um desktop Bluefin Dakota recém-instalado — índice das
+# automações. Espelha site.yml (Fedora Atomic clássico), com duas
+# diferenças: o YubiKey e o libfprint usam versões próprias em
+# playbooks/dakota/, porque o Dakota é GNOME OS (não Fedora/RHEL) —
+# sem `authselect`, sem RPMs, publicado como imagem bootc sobre backend
+# composefs-oci (não rpm-ostree). Veja o cabeçalho de cada arquivo em
+# playbooks/dakota/ e a seção "Bluefin Dakota" do README para detalhes.
+#
+# Todos os outros playbooks (bitwarden, zed, users, printer, neovim,
+# capslock, keepassxc) são os MESMOS arquivos usados por site.yml — não
+# precisam de nenhuma adaptação para o Dakota.
+#
+# NÃO importa playbooks/homebrew.yml (tap ublue-os + casks do VSCode/Zed):
+# no Dakota, a instalação do VSCode e do Zed já é gerenciada pelo `ujust`
+# da própria imagem, então esse playbook seria redundante ali. O
+# playbooks/zed.yml abaixo continua rodando — ele só configura o Podman
+# como runtime de dev containers do Zed (settings.json), não instala nada.
+#
+# Rode só uma automação com `--tags <tag>`, ou pule uma com
+# `--skip-tags <tag>`.
+#
+# Uso: ansible-playbook site-dakota.yml --ask-become-pass
+# (não depende do submódulo git external/bluefin-distrobox-libfprint —
+# o libfprint no Dakota é autocontido, veja playbooks/dakota/libfprint.yml)
+- name: Bitwarden — Flatpak + agente SSH + polkit (desbloqueio biométrico)
+  # tag "never": não roda em `ansible-playbook site-dakota.yml` sem
+  # --tags — só sob pedido explícito (--tags bitwarden / `just bitwarden-dakota`).
+  ansible.builtin.import_playbook: playbooks/bitwarden.yml
+  tags: [bitwarden, never]
+
+- name: Zed — Podman como runtime de dev containers
+  ansible.builtin.import_playbook: playbooks/zed.yml
+  tags: [zed]
+
+- name: YubiKey no Dakota (pcscd + import da chave GPG, sem PAM/authselect)
+  ansible.builtin.import_playbook: playbooks/dakota/yubikey.yml
+  tags: [yubikey]
+
+- name: Usuários adicionais do computador
+  ansible.builtin.import_playbook: playbooks/users.yml
+  tags: [users]
+
+- name: Impressora EPSON L4160 (driverless)
+  ansible.builtin.import_playbook: playbooks/printer.yml
+  tags: [printer]
+
+- name: Neovim + LazyVim
+  ansible.builtin.import_playbook: playbooks/neovim.yml
+  tags: [neovim]
+
+- name: libfprint (goodix538d) no Dakota — build em distrobox, sem o submódulo Fedora
+  ansible.builtin.import_playbook: playbooks/dakota/libfprint.yml
+  tags: [libfprint]
+
+- name: Caps Lock via kanata (evdev, tap=Esc / hold=Ctrl)
+  ansible.builtin.import_playbook: playbooks/capslock.yml
+  tags: [capslock]
+
+- name: KeePassXC — travar ao remover a YubiKey + ponte de native messaging
+  # tag guarda-chuva "keepassxc": roda os dois blocos do playbook
+  # (keepassxc-yubikey-lock, keepassxc-browser); cada um também é
+  # selecionável isoladamente com sua própria tag.
+  ansible.builtin.import_playbook: playbooks/keepassxc.yml
+  tags: [keepassxc]

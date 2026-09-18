@@ -73,3 +73,160 @@
       ansible.builtin.command: udevadm control --reload-rules
       changed_when: false
       listen: reload udev rules (keepassxc)
+
+- name: KeePassXC — remover a ponte de native messaging com navegadores Flatpak
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  tasks:
+    - name: Verificar quais navegadores Flatpak suportados estão instalados
+      ansible.builtin.command: flatpak info {{ item.flatpak_id }}
+      register: keepassxc_browser_uninstall_precheck
+      changed_when: false
+      failed_when: false
+      loop: "{{ keepassxc_native_messaging_targets }}"
+      loop_control:
+        label: "{{ item.flatpak_id }}"
+      tags: [keepassxc-browser]
+
+    # Um `block` não aceita `loop` diretamente em Ansible — por isso os
+    # atributos loop/when/vars/tags abaixo são repetidos em cada task
+    # individual, em vez de um block único.
+    - name: Remover o manifesto de native messaging
+      ansible.builtin.file:
+        path: "{{ keepassxc_native_messaging_dir }}/{{ keepassxc_native_messaging_manifest_name }}"
+        state: absent
+      loop: "{{ keepassxc_browser_uninstall_precheck.results }}"
+      loop_control:
+        label: "{{ item.item.flatpak_id }}"
+      when: item.rc == 0
+      vars:
+        keepassxc_native_messaging_dir: >-
+          {{ ansible_facts.env.HOME }}/.var/app/{{ item.item.flatpak_id }}/{{
+          '.mozilla/native-messaging-hosts' if item.item.kind == 'firefox'
+          else 'config/' + item.item.vendor_dir + '/NativeMessagingHosts' }}
+      tags: [keepassxc-browser]
+
+    - name: Remover o wrapper flatpak-spawn
+      ansible.builtin.file:
+        path: "{{ keepassxc_proxy_host_dest }}"
+        state: absent
+      loop: "{{ keepassxc_browser_uninstall_precheck.results }}"
+      loop_control:
+        label: "{{ item.item.flatpak_id }}"
+      when: item.rc == 0
+      vars:
+        keepassxc_proxy_host_dest: >-
+          {{ ansible_facts.env.HOME }}/.var/app/{{ item.item.flatpak_id }}/data/keepassxc-proxy-host
+      tags: [keepassxc-browser]
+
+    - name: Revogar o talk-name org.freedesktop.Flatpak concedido ao navegador
+      ansible.builtin.command: >-
+        flatpak override --user --no-talk-name=org.freedesktop.Flatpak {{ item.item.flatpak_id }}
+      loop: "{{ keepassxc_browser_uninstall_precheck.results }}"
+      loop_control:
+        label: "{{ item.item.flatpak_id }}"
+      when: item.rc == 0
+      changed_when: true
+      tags: [keepassxc-browser]
+
+- name: libfprint (goodix538d) no Dakota — remover o install em /usr/local e o wiring do fprintd
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  become: true
+
+  tasks:
+    - name: Restaurar o fprintd.service padrão (remover o override do LD_LIBRARY_PATH)
+      ansible.builtin.file:
+        path: /etc/systemd/system/fprintd.service.d/override.conf
+        state: absent
+      notify:
+        - reload systemd (libfprint-dakota)
+        - restart fprintd (libfprint-dakota)
+      tags: [libfprint-dakota]
+
+    - name: Remover o diretório do drop-in, se ficou vazio
+      ansible.builtin.file:
+        path: /etc/systemd/system/fprintd.service.d
+        state: directory
+      tags: [libfprint-dakota]
+
+    - name: Remover a regra udev
+      ansible.builtin.file:
+        path: /etc/udev/rules.d/70-libfprint-2.rules
+        state: absent
+      notify: reload udev rules (libfprint-dakota)
+      tags: [libfprint-dakota]
+
+    - name: Remover os headers do libfprint-2
+      ansible.builtin.file:
+        path: "{{ dakota_libfprint_usrlocal_prefix }}/include/libfprint-2"
+        state: absent
+      tags: [libfprint-dakota]
+
+    - name: Remover a lib, pkgconfig e gir/typelib do libfprint-2
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ dakota_libfprint_usrlocal_libdir }}/libfprint-2.so.2.0.0"
+        - "{{ dakota_libfprint_usrlocal_libdir }}/libfprint-2.so.2"
+        - "{{ dakota_libfprint_usrlocal_libdir }}/libfprint-2.so"
+        - "{{ dakota_libfprint_usrlocal_libdir }}/pkgconfig/libfprint-2.pc"
+        - "{{ dakota_libfprint_usrlocal_libdir }}/girepository-1.0/FPrint-2.0.typelib"
+        - "{{ dakota_libfprint_usrlocal_prefix }}/share/gir-1.0/FPrint-2.0.gir"
+        - "{{ dakota_libfprint_usrlocal_prefix }}/share/gtk-doc/html/libfprint-2"
+        - "{{ dakota_libfprint_usrlocal_prefix }}/share/metainfo/org.freedesktop.libfprint.metainfo.xml"
+      tags: [libfprint-dakota]
+
+    - name: Localizar as bibliotecas de runtime do Homebrew vendorizadas para remover
+      ansible.builtin.find:
+        paths: "{{ dakota_libfprint_usrlocal_libdir }}"
+        patterns:
+          - "libopencv_*.so*"
+          - "libopenblas*.so*"
+          - "libtbb*.so*"
+          - "libgfortran*.so*"
+          - "libgomp*.so*"
+      register: vendored_brew_libs
+      tags: [libfprint-dakota]
+
+    - name: Remover as bibliotecas de runtime do Homebrew vendorizadas
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ vendored_brew_libs.files }}"
+      tags: [libfprint-dakota]
+
+    - name: Remover o conjunto de regras de contexto SELinux de /usr/local/lib64
+      community.general.sefcontext:
+        target: "{{ dakota_libfprint_usrlocal_libdir }}(/.*)?"
+        setype: lib_t
+        state: absent
+      when: ansible_facts.selinux.status | default('disabled') == 'enabled'
+      tags: [libfprint-dakota]
+
+    - name: Atualizar o cache do linker dinâmico
+      ansible.builtin.command: ldconfig
+      changed_when: false
+      tags: [libfprint-dakota]
+
+  handlers:
+    - name: reload udev rules (libfprint-dakota)
+      ansible.builtin.command: udevadm control --reload-rules
+      changed_when: false
+      listen: reload udev rules (libfprint-dakota)
+
+    - name: reload systemd (libfprint-dakota)
+      ansible.builtin.systemd:
+        daemon_reload: true
+      listen: reload systemd (libfprint-dakota)
+
+    - name: restart fprintd (libfprint-dakota)
+      ansible.builtin.systemd:
+        name: fprintd.service
+        state: restarted
+      failed_when: false
+      listen: restart fprintd (libfprint-dakota)
