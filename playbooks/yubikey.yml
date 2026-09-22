@@ -374,9 +374,11 @@
     - name: reload udev rules
       ansible.builtin.command: udevadm control --reload-rules
       changed_when: false
+      become: true
       listen: reload udev rules
 
     - name: trigger udev
       ansible.builtin.command: udevadm trigger
       changed_when: false
+      become: true
       listen: trigger udev

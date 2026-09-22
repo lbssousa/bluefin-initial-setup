@@ -11,10 +11,12 @@
 # A trava do KeePassXC ao remover a YubiKey (tag keepassxc-yubikey-lock)
 # NÃO mora mais aqui — foi movida para playbooks/yubikey.yml e
 # playbooks/dakota/yubikey.yml, já que é disparada pela YubiKey (regra
-# udev), não por nada específico do KeePassXC; lá ela também falha
-# graciosamente (avisa e pula) se o KeePassXC não estiver instalado, em
-# vez do `ansible.builtin.fail` abaixo, que interromperia as plays
-# seguintes de site.yml/site-dakota.yml para o host.
+# udev), não por nada específico do KeePassXC.
+#
+# Se o KeePassXC não estiver instalado, esta automação avisa e pula em
+# vez de falhar (mesmo raciocínio de lá): um `ansible.builtin.fail`
+# aqui interromperia as plays seguintes de site.yml/site-dakota.yml
+# para o host (bash.yml incluso).
 - name: KeePassXC — ponte de native messaging para o KeePassXC-Browser
   hosts: localhost
   connection: local
@@ -42,14 +44,15 @@
       failed_when: false
       tags: keepassxc-browser
 
-    - name: Falhar com orientação se o KeePassXC não for encontrado
-      ansible.builtin.fail:
+    - name: Avisar que o KeePassXC não foi encontrado (ponte de native messaging pulada)
+      ansible.builtin.debug:
         msg: >-
           KeePassXC não encontrado (nem via Flatpak
-          org.keepassxc.KeePassXC, nem no PATH). A instalação fica fora
-          desta automação — instale-o antes e habilite Ferramentas >
-          Configurações > Geral > "Habilitar integração com D-Bus"
-          (ativa por padrão).
+          org.keepassxc.KeePassXC, nem no PATH) — pulando a ponte de
+          native messaging do KeePassXC-Browser. Instale o KeePassXC,
+          habilite Ferramentas > Configurações > Geral > "Habilitar
+          integração com D-Bus" (ativa por padrão) e rode de novo com
+          --tags keepassxc-browser para habilitá-la.
       when: keepassxc_flatpak_check.rc != 0 and keepassxc_bin_check.rc != 0
       tags: keepassxc-browser
 
@@ -66,7 +69,10 @@
   tasks:
     # Um `block` não aceita `loop` diretamente em Ansible — por isso os
     # atributos loop/when/vars/tags abaixo são repetidos em cada task
-    # individual, em vez de um block único.
+    # individual, em vez de um block único. O `and (... rc == 0 ...)`
+    # em cada `when` é o que faz esta automação pular graciosamente
+    # (em vez de tentar instalar a ponte) quando o KeePassXC não está
+    # instalado — veja o aviso em pre_tasks acima.
     - name: Garantir que o diretório de dados do navegador existe (native messaging)
       ansible.builtin.file:
         path: "{{ keepassxc_proxy_host_dest | dirname }}"
@@ -75,7 +81,9 @@
       loop: "{{ keepassxc_browser_precheck.results }}"
       loop_control:
         label: "{{ item.item.flatpak_id }}"
-      when: item.rc == 0
+      when: >-
+        item.rc == 0 and
+        (keepassxc_flatpak_check.rc == 0 or keepassxc_bin_check.rc == 0)
       vars:
         keepassxc_proxy_host_dest: >-
           {{ ansible_facts.env.HOME }}/.var/app/{{ item.item.flatpak_id }}/data/keepassxc-proxy-host
@@ -89,7 +97,9 @@
       loop: "{{ keepassxc_browser_precheck.results }}"
       loop_control:
         label: "{{ item.item.flatpak_id }}"
-      when: item.rc == 0
+      when: >-
+        item.rc == 0 and
+        (keepassxc_flatpak_check.rc == 0 or keepassxc_bin_check.rc == 0)
       vars:
         keepassxc_proxy_host_dest: >-
           {{ ansible_facts.env.HOME }}/.var/app/{{ item.item.flatpak_id }}/data/keepassxc-proxy-host
@@ -103,7 +113,9 @@
       loop: "{{ keepassxc_browser_precheck.results }}"
       loop_control:
         label: "{{ item.item.flatpak_id }}"
-      when: item.rc == 0
+      when: >-
+        item.rc == 0 and
+        (keepassxc_flatpak_check.rc == 0 or keepassxc_bin_check.rc == 0)
       vars:
         keepassxc_native_messaging_dir: >-
           {{ ansible_facts.env.HOME }}/.var/app/{{ item.item.flatpak_id }}/{{
@@ -119,7 +131,9 @@
       loop: "{{ keepassxc_browser_precheck.results }}"
       loop_control:
         label: "{{ item.item.flatpak_id }}"
-      when: item.rc == 0
+      when: >-
+        item.rc == 0 and
+        (keepassxc_flatpak_check.rc == 0 or keepassxc_bin_check.rc == 0)
       vars:
         keepassxc_proxy_host_dest: >-
           {{ ansible_facts.env.HOME }}/.var/app/{{ item.item.flatpak_id }}/data/keepassxc-proxy-host
@@ -139,6 +153,8 @@
       loop: "{{ keepassxc_browser_precheck.results }}"
       loop_control:
         label: "{{ item.item.flatpak_id }}"
-      when: item.rc == 0
+      when: >-
+        item.rc == 0 and
+        (keepassxc_flatpak_check.rc == 0 or keepassxc_bin_check.rc == 0)
       changed_when: true
       tags: keepassxc-browser

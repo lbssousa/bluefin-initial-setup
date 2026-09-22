@@ -188,11 +188,10 @@ com `--skip-tags <tag>`.
     validado em hardware real.
 
     A instalação do KeePassXC fica fora do escopo (mesmo raciocínio do
-    `pam-u2f` no item YubiKey acima), e aqui **a ausência dele é
-    fatal**: se não estiver instalado, esta automação falha com
-    orientação em vez de pular — ao contrário da trava ao remover a
-    YubiKey (item 4 acima), que agora mora em `playbooks/yubikey.yml` e
-    falha graciosamente.
+    `pam-u2f` no item YubiKey acima). Se não estiver instalado, esta
+    automação avisa e pula em vez de falhar — mesmo comportamento da
+    trava ao remover a YubiKey (item 4 acima), que agora mora em
+    `playbooks/yubikey.yml`.
 11. **Bash com cara de Fish** (`playbooks/bash.yml`, tag guarda-chuva `bash`) — dois blocos
     independentes, cada um com sua própria sub-tag:
     - `bash-completion` — autocomplete case-insensitive
