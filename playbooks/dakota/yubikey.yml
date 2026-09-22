@@ -79,8 +79,14 @@
             - restart pcscd
 
         - name: Instalar a regra udev que reinicia o pcscd ao (re)conectar a YubiKey
+          # Caminho absoluto, não "yubikey-pcscd-restart.rules.j2": o
+          # módulo template busca em <diretório do playbook>/templates/
+          # — playbooks/dakota/templates/, não playbooks/templates/,
+          # onde o arquivo mora de fato (compartilhado com
+          # playbooks/yubikey.yml). Mesma exceção documentada para
+          # dakota-fprintd-override.conf.j2 em playbooks/dakota/libfprint.yml.
           ansible.builtin.template:
-            src: yubikey-pcscd-restart.rules.j2
+            src: "{{ inventory_dir }}/playbooks/templates/yubikey-pcscd-restart.rules.j2"
             dest: "{{ yubikey_pcscd_restart_udev_rule_dest }}"
             owner: root
             group: root
@@ -190,16 +196,22 @@
             mode: "0755"
 
         - name: Instalar o script de travamento via D-Bus
+          # Caminho absoluto: copy também busca relativo a
+          # playbooks/dakota/ (files/), não playbooks/files/, onde o
+          # script mora de fato (compartilhado com playbooks/yubikey.yml).
           ansible.builtin.copy:
-            src: keepassxc-yubikey-lock.sh
+            src: "{{ inventory_dir }}/playbooks/files/keepassxc-yubikey-lock.sh"
             dest: "{{ keepassxc_yubikey_lock_script_dest }}"
             owner: root
             group: root
             mode: "0755"
 
         - name: Instalar a regra udev (dispara na remoção da YubiKey)
+          # Caminho absoluto: mesmo motivo do "template" de
+          # yubikey-pcscd-restart.rules.j2 acima — o arquivo mora em
+          # playbooks/templates/, não playbooks/dakota/templates/.
           ansible.builtin.template:
-            src: keepassxc-yubikey-lock.rules.j2
+            src: "{{ inventory_dir }}/playbooks/templates/keepassxc-yubikey-lock.rules.j2"
             dest: "{{ keepassxc_yubikey_lock_udev_rule_dest }}"
             owner: root
             group: root
@@ -237,9 +249,11 @@
     - name: reload udev rules
       ansible.builtin.command: udevadm control --reload-rules
       changed_when: false
+      become: true
       listen: reload udev rules
 
     - name: trigger udev
       ansible.builtin.command: udevadm trigger
       changed_when: false
+      become: true
       listen: trigger udev

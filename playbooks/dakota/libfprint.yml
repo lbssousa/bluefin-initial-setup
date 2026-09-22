@@ -270,15 +270,18 @@
     - name: reload udev rules
       ansible.builtin.command: udevadm control --reload-rules
       changed_when: false
+      become: true
       listen: reload udev rules
 
     - name: reload systemd
       ansible.builtin.systemd:
         daemon_reload: true
+      become: true
       listen: reload systemd
 
     - name: restart fprintd
       ansible.builtin.systemd:
         name: fprintd.service
         state: restarted
+      become: true
       listen: restart fprintd
