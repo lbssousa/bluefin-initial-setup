@@ -104,8 +104,7 @@
             msg: >-
               Nenhum cartão OpenPGP detectado (gpg --card-status falhou).
               Insira a YubiKey e rode de novo:
-              ansible-playbook site-dakota.yml --ask-become-pass
-              --tags yubikey-gpg-import
+              ansible-playbook site-dakota.yml --tags yubikey-gpg-import
           when: yubikey_card_status.rc != 0
 
         - name: Extrair o fingerprint da chave de assinatura do cartão

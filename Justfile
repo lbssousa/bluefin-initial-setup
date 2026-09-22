@@ -1,5 +1,11 @@
 set shell := ["bash", "-uc"]
 
+# Playbooks that need root run under `run0 --empower` (see
+# run-empowered.sh): one polkit authentication up front, then every
+# `become: true` task's run0 inside passes without prompting again.
+# Recipes for user-level-only tags call plain ansible-playbook.
+ap := "./run-empowered.sh ansible-playbook"
+
 default:
     @just --list
 
@@ -24,44 +30,49 @@ _ensure-submodules:
 # "never" in site.yml, so they don't run here — only via `just bitwarden`
 # / `just libfprint` (the latter also needs the submodule, see below).
 setup: _ensure-collections
-    ansible-playbook site.yml --ask-become-pass
+    {{ ap }} site.yml
 
 # Fedora Atomic (Bluefin/uBlue classic) — run a single automation by its site.yml tag.
 bitwarden: _ensure-collections
-    ansible-playbook site.yml --ask-become-pass --tags bitwarden
+    {{ ap }} site.yml --tags bitwarden
 
+# No root needed (Homebrew tap + user-level casks).
 homebrew: _ensure-collections
-    ansible-playbook site.yml --ask-become-pass --tags homebrew
+    ansible-playbook site.yml --tags homebrew
 
+# No root needed (writes to ~/.config/zed only).
 zed: _ensure-collections
-    ansible-playbook site.yml --ask-become-pass --tags zed
+    ansible-playbook site.yml --tags zed
 
 yubikey: _ensure-collections
-    ansible-playbook site.yml --ask-become-pass --tags yubikey
+    {{ ap }} site.yml --tags yubikey
 
 users: _ensure-collections
-    ansible-playbook site.yml --ask-become-pass --tags users
+    {{ ap }} site.yml --tags users
 
 printer: _ensure-collections
-    ansible-playbook site.yml --ask-become-pass --tags printer
+    {{ ap }} site.yml --tags printer
 
+# No root needed (Homebrew install + ~/.config/nvim only).
 neovim: _ensure-collections
-    ansible-playbook site.yml --ask-become-pass --tags neovim
+    ansible-playbook site.yml --tags neovim
 
 libfprint: _ensure-collections _ensure-submodules
-    ansible-playbook site.yml --ask-become-pass --tags libfprint
+    {{ ap }} site.yml --tags libfprint
 
 capslock: _ensure-collections
-    ansible-playbook site.yml --ask-become-pass --tags capslock
+    {{ ap }} site.yml --tags capslock
 
 keepassxc-yubikey-lock: _ensure-collections
-    ansible-playbook site.yml --ask-become-pass --tags keepassxc-yubikey-lock
+    {{ ap }} site.yml --tags keepassxc-yubikey-lock
 
+# No root needed (writes to ~/.var/app/<browser>/... only).
 keepassxc-browser: _ensure-collections
-    ansible-playbook site.yml --ask-become-pass --tags keepassxc-browser
+    ansible-playbook site.yml --tags keepassxc-browser
 
+# No root needed (~/.bashrc/~/.inputrc + a Homebrew-adjacent user build).
 bash: _ensure-collections
-    ansible-playbook site.yml --ask-become-pass --tags bash
+    ansible-playbook site.yml --tags bash
 
 # Bluefin Dakota — same automations via site-dakota.yml (no submodule
 # needed there). YubiKey and libfprint use their own Dakota-specific
@@ -70,41 +81,41 @@ bash: _ensure-collections
 #
 # Run the setup playbook against a Bluefin Dakota host.
 setup-dakota: _ensure-collections
-    ansible-playbook site-dakota.yml --ask-become-pass
+    {{ ap }} site-dakota.yml
 
 bitwarden-dakota: _ensure-collections
-    ansible-playbook site-dakota.yml --ask-become-pass --tags bitwarden
+    {{ ap }} site-dakota.yml --tags bitwarden
 
 # No "homebrew-dakota" recipe: on Dakota, VSCode/Zed installation is
 # already handled by the image's own `ujust` recipes, so
 # playbooks/homebrew.yml isn't imported by site-dakota.yml.
 
 zed-dakota: _ensure-collections
-    ansible-playbook site-dakota.yml --ask-become-pass --tags zed
+    ansible-playbook site-dakota.yml --tags zed
 
 yubikey-dakota: _ensure-collections
-    ansible-playbook site-dakota.yml --ask-become-pass --tags yubikey
+    {{ ap }} site-dakota.yml --tags yubikey
 
 users-dakota: _ensure-collections
-    ansible-playbook site-dakota.yml --ask-become-pass --tags users
+    {{ ap }} site-dakota.yml --tags users
 
 printer-dakota: _ensure-collections
-    ansible-playbook site-dakota.yml --ask-become-pass --tags printer
+    {{ ap }} site-dakota.yml --tags printer
 
 neovim-dakota: _ensure-collections
-    ansible-playbook site-dakota.yml --ask-become-pass --tags neovim
+    ansible-playbook site-dakota.yml --tags neovim
 
 libfprint-dakota: _ensure-collections
-    ansible-playbook site-dakota.yml --ask-become-pass --tags libfprint
+    {{ ap }} site-dakota.yml --tags libfprint
 
 capslock-dakota: _ensure-collections
-    ansible-playbook site-dakota.yml --ask-become-pass --tags capslock
+    {{ ap }} site-dakota.yml --tags capslock
 
 keepassxc-yubikey-lock-dakota: _ensure-collections
-    ansible-playbook site-dakota.yml --ask-become-pass --tags keepassxc-yubikey-lock
+    {{ ap }} site-dakota.yml --tags keepassxc-yubikey-lock
 
 keepassxc-browser-dakota: _ensure-collections
-    ansible-playbook site-dakota.yml --ask-become-pass --tags keepassxc-browser
+    ansible-playbook site-dakota.yml --tags keepassxc-browser
 
 bash-dakota: _ensure-collections
-    ansible-playbook site-dakota.yml --ask-become-pass --tags bash
+    ansible-playbook site-dakota.yml --tags bash

@@ -23,8 +23,9 @@
 # Bitwarden e libfprint têm tag "never": não rodam com esse comando sem
 # --tags, só sob pedido explícito (--tags bitwarden / --tags libfprint).
 #
-# Uso: ansible-playbook site-dakota.yml --ask-become-pass
-# (não depende do submódulo git external/bluefin-distrobox-libfprint —
+# Uso: ./run-empowered.sh ansible-playbook site-dakota.yml
+# (privilégio via run0 --empower — veja ansible.cfg e run-empowered.sh;
+# não depende do submódulo git external/bluefin-distrobox-libfprint —
 # o libfprint no Dakota é autocontido, veja playbooks/dakota/libfprint.yml)
 - name: Bitwarden — Flatpak + agente SSH + polkit (desbloqueio biométrico)
   # tag "never": não roda em `ansible-playbook site-dakota.yml` sem

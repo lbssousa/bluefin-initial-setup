@@ -21,9 +21,10 @@
 # em playbooks/yubikey.yml) evita esse problema e, de brinde, evita a
 # ambiguidade de onde o kanata.kbd deveria morar: o `service do` da
 # fórmula usa Dir.home do processo no momento em que a unidade é
-# gerada — como o `become` do Ansible roda sudo com "-H" por padrão,
-# isso resolveria para /root, não para o $HOME do usuário real.
-# Controlando o ExecStart nós mesmos, kanata_config_dest continua sendo
+# gerada — como a escalação de privilégio do become (veja
+# ansible.cfg) troca de usuário para root, isso resolveria para /root,
+# não para o $HOME do usuário real. Controlando o ExecStart nós
+# mesmos, kanata_config_dest continua sendo
 # ~/.config/kanata/kanata.kbd, como qualquer outra config pessoal deste
 # repositório.
 - name: Caps Lock via kanata (evdev, tap=Esc / hold=Ctrl)

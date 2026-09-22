@@ -2,7 +2,9 @@
 # Setup inicial de um desktop Bluefin/uBlue recém-instalado — índice das
 # automações. Cada uma é um playbook próprio (em playbooks/, ou um
 # submódulo git em external/), importado abaixo via import_playbook, o
-# que faz todas rodarem dentro do mesmo `--ask-become-pass`.
+# que faz todas rodarem dentro da mesma escalação de privilégio via
+# run0 (ansible.cfg's become_method — veja run-empowered.sh e a seção
+# "Privilégio: run0 --empower" do README).
 #
 # Rode só uma automação com `--tags <tag>`, ou pule uma com
 # `--skip-tags <tag>` (ex.: máquinas sem a impressora). Veja o comentário
@@ -13,7 +15,7 @@
 # O libfprint também requer o submódulo git inicializado antes:
 # git submodule update --init --recursive
 #
-# Uso: ansible-playbook site.yml --ask-become-pass
+# Uso: ./run-empowered.sh ansible-playbook site.yml
 - name: Bitwarden — Flatpak + agente SSH + polkit (desbloqueio biométrico)
   # tag "never": não roda em `ansible-playbook site.yml` sem --tags —
   # só sob pedido explícito (--tags bitwarden / `just bitwarden`).
