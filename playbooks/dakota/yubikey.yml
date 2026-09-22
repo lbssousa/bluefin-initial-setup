@@ -12,9 +12,11 @@
 # `rpm -q pam-u2f` (Dakota não tem banco RPM).
 #
 # O que continua fazendo sentido aqui, por ser genérico o bastante:
-#   - yubikey-setup-pcscd: mesmo drop-in systemd de
-#     playbooks/yubikey.yml, evita uma race condition entre pcscd e udev
-#     no boot — nada específico de Fedora.
+#   - yubikey-setup-pcscd: mesmo fix de playbooks/yubikey.yml para a
+#     YubiKey ficando invisível para o GnuPG até reiniciar o pcscd na
+#     mão — drop-in systemd (corrida com o udev no boot) + regra udev
+#     (pcscd não reconhecendo a YubiKey ao reconectar/após suspender) —
+#     nada específico de Fedora.
 #   - yubikey-gpg-import (NOVO): importa a chave pública OpenPGP do
 #     cartão da YubiKey (gpg --card-status / --edit-card fetch) para o
 #     keyring local, útil para SSH/assinatura via GPG independente de
@@ -22,13 +24,39 @@
 #     chave importada como `user.signingkey` no git (--global) e liga
 #     `commit.gpgsign`/`tag.gpgsign`, para assinar commits e tags por
 #     padrão com a YubiKey.
-- name: YubiKey no Dakota (pcscd + import da chave GPG, sem PAM)
+#   - keepassxc-yubikey-lock: mesmo gatilho de playbooks/yubikey.yml
+#     (regra udev + script de trava via D-Bus quando a YubiKey é
+#     removida) — genérico o bastante para não precisar de nenhuma
+#     adaptação no Dakota. Se o KeePassXC não estiver instalado, a
+#     tarefa avisa e pula (não falha) — ver o motivo no cabeçalho de
+#     playbooks/yubikey.yml.
+- name: YubiKey no Dakota (pcscd + import da chave GPG, sem PAM) + trava do KeePassXC
   hosts: localhost
   connection: local
   gather_facts: true
 
+  pre_tasks:
+    - name: Verificar se o KeePassXC está instalado (Flatpak)
+      ansible.builtin.command: flatpak info org.keepassxc.KeePassXC
+      register: keepassxc_flatpak_check
+      changed_when: false
+      failed_when: false
+      tags: [keepassxc-yubikey-lock]
+
+    - name: Verificar se o KeePassXC está instalado (binário no PATH)
+      ansible.builtin.command: which keepassxc
+      register: keepassxc_bin_check
+      changed_when: false
+      failed_when: false
+      tags: [keepassxc-yubikey-lock]
+
   tasks:
-    # ── pcscd — corrige race condition com udev no boot ───────────────
+    # ── pcscd — corrige a YubiKey ficando invisível para o GnuPG ──────
+    # Mesma automação de playbooks/yubikey.yml (ver o cabeçalho de lá
+    # para detalhes) — nada específico do Dakota. Cobre dois problemas
+    # distintos do pcsc-lite: a corrida com o udev no boot (drop-in
+    # ExecStartPre=udevadm settle) e o pcscd não reconhecendo a YubiKey
+    # ao reconectar/após suspender (regra udev yubikey-pcscd-restart.rules).
     - name: pcscd — aguardar udev settle no boot (YubiKey + GPG)
       tags: [yubikey-setup-pcscd]
       become: true
@@ -49,6 +77,17 @@
           notify:
             - reload systemd
             - restart pcscd
+
+        - name: Instalar a regra udev que reinicia o pcscd ao (re)conectar a YubiKey
+          ansible.builtin.template:
+            src: yubikey-pcscd-restart.rules.j2
+            dest: "{{ yubikey_pcscd_restart_udev_rule_dest }}"
+            owner: root
+            group: root
+            mode: "0644"
+          notify:
+            - reload udev rules
+            - trigger udev
 
     # ── Importar a chave OpenPGP do cartão da YubiKey ──────────────────
     - name: Importar a chave pública OpenPGP do cartão da YubiKey
@@ -137,6 +176,51 @@
             value: "true"
           when: yubikey_gpg_fingerprint | default('') | length > 0
 
+    # ── KeePassXC — travar ao remover a YubiKey ────────────────────────
+    # Mesma automação de playbooks/yubikey.yml (ver o cabeçalho de lá
+    # para detalhes) — nada específico do Dakota.
+    - name: KeePassXC — travar ao remover a YubiKey
+      become: true
+      tags: [keepassxc-yubikey-lock]
+      when: keepassxc_flatpak_check.rc == 0 or keepassxc_bin_check.rc == 0
+      block:
+        - name: Garantir que o diretório de destino do script existe
+          ansible.builtin.file:
+            path: "{{ keepassxc_yubikey_lock_script_dest | dirname }}"
+            state: directory
+            mode: "0755"
+
+        - name: Instalar o script de travamento via D-Bus
+          ansible.builtin.copy:
+            src: keepassxc-yubikey-lock.sh
+            dest: "{{ keepassxc_yubikey_lock_script_dest }}"
+            owner: root
+            group: root
+            mode: "0755"
+
+        - name: Instalar a regra udev (dispara na remoção da YubiKey)
+          ansible.builtin.template:
+            src: keepassxc-yubikey-lock.rules.j2
+            dest: "{{ keepassxc_yubikey_lock_udev_rule_dest }}"
+            owner: root
+            group: root
+            mode: "0644"
+          notify:
+            - reload udev rules
+            - trigger udev
+
+    - name: Avisar que o KeePassXC não foi encontrado (trava ao remover a YubiKey pulada)
+      ansible.builtin.debug:
+        msg: >-
+          KeePassXC não encontrado (nem via Flatpak
+          org.keepassxc.KeePassXC, nem no PATH) — pulando a automação
+          de trava ao remover a YubiKey. Instale o KeePassXC, habilite
+          Ferramentas > Configurações > Geral > "Habilitar integração
+          com D-Bus" (ativa por padrão) e rode de novo com --tags
+          keepassxc-yubikey-lock para habilitá-la.
+      tags: [keepassxc-yubikey-lock]
+      when: keepassxc_flatpak_check.rc != 0 and keepassxc_bin_check.rc != 0
+
   handlers:
     - name: reload systemd
       ansible.builtin.systemd:
@@ -150,3 +234,13 @@
         state: restarted
       become: true
       listen: restart pcscd
+
+    - name: reload udev rules
+      ansible.builtin.command: udevadm control --reload-rules
+      changed_when: false
+      listen: reload udev rules
+
+    - name: trigger udev
+      ansible.builtin.command: udevadm trigger
+      changed_when: false
+      listen: trigger udev

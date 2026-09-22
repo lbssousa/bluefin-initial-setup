@@ -5,11 +5,15 @@
 # que faz todas rodarem dentro do mesmo `--ask-become-pass`.
 #
 # Rode só uma automação com `--tags <tag>`, ou pule uma com
-# `--skip-tags <tag>` (ex.: máquinas sem a impressora ou sem o leitor
-# biométrico). Veja o comentário de cada playbooks/*.yml para detalhes.
+# `--skip-tags <tag>` (ex.: máquinas sem a impressora). Veja o comentário
+# de cada playbooks/*.yml para detalhes.
+#
+# Bitwarden e libfprint têm tag "never": não rodam com esse comando sem
+# --tags, só sob pedido explícito (--tags bitwarden / --tags libfprint).
+# O libfprint também requer o submódulo git inicializado antes:
+# git submodule update --init --recursive
 #
 # Uso: ansible-playbook site.yml --ask-become-pass
-# (requer o submódulo git inicializado: git submodule update --init)
 - name: Bitwarden — Flatpak + agente SSH + polkit (desbloqueio biométrico)
   # tag "never": não roda em `ansible-playbook site.yml` sem --tags —
   # só sob pedido explícito (--tags bitwarden / `just bitwarden`).
@@ -24,7 +28,10 @@
   ansible.builtin.import_playbook: playbooks/zed.yml
   tags: [zed]
 
-- name: YubiKey FIDO2/U2F
+- name: YubiKey FIDO2/U2F + trava do KeePassXC ao remover a YubiKey
+  # tag guarda-chuva "yubikey": inclui também a tag keepassxc-yubikey-lock
+  # (falha graciosamente — avisa e pula — se o KeePassXC não estiver
+  # instalado); veja o cabeçalho de playbooks/yubikey.yml.
   ansible.builtin.import_playbook: playbooks/yubikey.yml
   tags: [yubikey]
 
@@ -41,17 +48,19 @@
   tags: [neovim]
 
 - name: libfprint (goodix538d) — github.com/lbssousa/bluefin-distrobox-libfprint
+  # tag "never": não roda em `ansible-playbook site.yml` sem --tags —
+  # só sob pedido explícito (--tags libfprint / `just libfprint`).
   ansible.builtin.import_playbook: external/bluefin-distrobox-libfprint/site.yml
-  tags: [libfprint]
+  tags: [libfprint, never]
 
 - name: Caps Lock via kanata (evdev, tap=Esc / hold=Ctrl)
   ansible.builtin.import_playbook: playbooks/capslock.yml
   tags: [capslock]
 
-- name: KeePassXC — travar ao remover a YubiKey + ponte de native messaging
-  # tag guarda-chuva "keepassxc": roda os dois blocos do playbook
-  # (keepassxc-yubikey-lock, keepassxc-browser); cada um também é
-  # selecionável isoladamente com sua própria tag.
+- name: KeePassXC — ponte de native messaging para o KeePassXC-Browser
+  # tag "keepassxc": mantida por compatibilidade com o `keepassxc`
+  # guarda-chuva anterior; hoje cobre só o bloco keepassxc-browser — a
+  # trava ao remover a YubiKey está na tag yubikey acima.
   ansible.builtin.import_playbook: playbooks/keepassxc.yml
   tags: [keepassxc]
 

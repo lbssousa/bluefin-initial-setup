@@ -20,6 +20,9 @@
 # Rode só uma automação com `--tags <tag>`, ou pule uma com
 # `--skip-tags <tag>`.
 #
+# Bitwarden e libfprint têm tag "never": não rodam com esse comando sem
+# --tags, só sob pedido explícito (--tags bitwarden / --tags libfprint).
+#
 # Uso: ansible-playbook site-dakota.yml --ask-become-pass
 # (não depende do submódulo git external/bluefin-distrobox-libfprint —
 # o libfprint no Dakota é autocontido, veja playbooks/dakota/libfprint.yml)
@@ -33,7 +36,10 @@
   ansible.builtin.import_playbook: playbooks/zed.yml
   tags: [zed]
 
-- name: YubiKey no Dakota (pcscd + import da chave GPG, sem PAM/authselect)
+- name: YubiKey no Dakota (pcscd + import da chave GPG, sem PAM/authselect) + trava do KeePassXC
+  # tag guarda-chuva "yubikey": inclui também a tag keepassxc-yubikey-lock
+  # (falha graciosamente — avisa e pula — se o KeePassXC não estiver
+  # instalado); veja o cabeçalho de playbooks/yubikey.yml.
   ansible.builtin.import_playbook: playbooks/dakota/yubikey.yml
   tags: [yubikey]
 
@@ -50,17 +56,19 @@
   tags: [neovim]
 
 - name: libfprint (goodix538d) no Dakota — build em distrobox, sem o submódulo Fedora
+  # tag "never": não roda em `ansible-playbook site-dakota.yml` sem
+  # --tags — só sob pedido explícito (--tags libfprint / `just libfprint-dakota`).
   ansible.builtin.import_playbook: playbooks/dakota/libfprint.yml
-  tags: [libfprint]
+  tags: [libfprint, never]
 
 - name: Caps Lock via kanata (evdev, tap=Esc / hold=Ctrl)
   ansible.builtin.import_playbook: playbooks/capslock.yml
   tags: [capslock]
 
-- name: KeePassXC — travar ao remover a YubiKey + ponte de native messaging
-  # tag guarda-chuva "keepassxc": roda os dois blocos do playbook
-  # (keepassxc-yubikey-lock, keepassxc-browser); cada um também é
-  # selecionável isoladamente com sua própria tag.
+- name: KeePassXC — ponte de native messaging para o KeePassXC-Browser
+  # tag "keepassxc": mantida por compatibilidade com o `keepassxc`
+  # guarda-chuva anterior; hoje cobre só o bloco keepassxc-browser — a
+  # trava ao remover a YubiKey está na tag yubikey acima.
   ansible.builtin.import_playbook: playbooks/keepassxc.yml
   tags: [keepassxc]
 
