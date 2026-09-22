@@ -24,7 +24,7 @@
 #     diretamente) e num drop-in systemd do fprintd.service em /etc —
 #     nunca em /usr.
 #
-# Usage: ansible-playbook site-dakota.yml --ask-become-pass --tags libfprint
+# Usage: ./run-empowered.sh ansible-playbook site-dakota.yml --tags libfprint
 - name: libfprint (goodix538d) no Dakota — build em distrobox + install em /var/usrlocal
   hosts: localhost
   connection: local

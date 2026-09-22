@@ -213,18 +213,28 @@
           changed_when: true
 
     # ── Teste de autenticação ──────────────────────────────────────────
-    - name: Testar autenticação via sudo com a YubiKey
+    # run0, não sudo: desde que este repositório passou a escalar
+    # privilégio via run0 (ansible.cfg's become_method — veja
+    # run-empowered.sh), testar "sudo" não verificaria mais o mecanismo
+    # que o Ansible realmente usa. Diferente do sudo, run0 não tem um
+    # "limpar cache" (não há `run0 -k`) — cada chamada de run0 fora de
+    # um processo já empowered pede autenticação do zero, então não há
+    # cache para limpar aqui.
+    #
+    # Rode esta tag ISOLADA (`ansible-playbook site.yml --tags
+    # yubikey-test`, sem passar por run-empowered.sh) para um teste de
+    # verdade: dentro de `just yubikey` (que roda sob `run0 --empower`
+    # para as outras etapas desta automação — veja o Justfile) o
+    # processo inteiro já está autenticado, e esta chamada de run0
+    # passaria sem pedir nada, sem realmente exercitar a YubiKey.
+    - name: Testar autenticação via run0 com a YubiKey
       tags: [yubikey-test]
       block:
-        - name: Limpar cache de credenciais do sudo
-          ansible.builtin.command: sudo -k
-          changed_when: false
-
-        - name: Autenticar via sudo (toque a YubiKey quando solicitado)
+        - name: Autenticar via run0 (toque a YubiKey quando solicitado)
           ansible.builtin.command:
             argv:
-              - sudo
-              - "--prompt=[YubiKey] Aguardando toque na chave (ou senha): "
+              - run0
+              - "--description=Teste de autenticação da YubiKey (site.yml, tag yubikey-test)"
               - "true"
           changed_when: false
           failed_when: false
@@ -240,8 +250,10 @@
             msg: >-
               Autenticação falhou. Verifique: YubiKey conectada (ykman
               list), chaves registradas
-              (~/.config/Yubico/u2f_keys) e o PAM (authselect current
-              --raw).
+              (~/.config/Yubico/u2f_keys), o PAM (authselect current
+              --raw) e se esta tag não foi rodada por engano dentro de
+              um processo já `run0 --empower` (veja o comentário
+              acima).
           when: yubikey_test_result.rc != 0
 
     # ── Reset — remove a configuração YubiKey do PAM ──────────────────

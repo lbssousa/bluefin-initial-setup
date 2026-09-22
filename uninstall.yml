@@ -1,7 +1,8 @@
 ---
 # Desinstalação — playbook independente, à parte de site.yml (mesmo
 # padrão do external/bluefin-distrobox-libfprint/uninstall.yml). Rode
-# com `ansible-playbook uninstall.yml --ask-become-pass`, ou só uma
+# com `./run-empowered.sh ansible-playbook uninstall.yml` (privilégio
+# via run0 --empower — veja ansible.cfg e run-empowered.sh), ou só uma
 # automação com `--tags <tag>`.
 #
 # Mais automações de desinstalação devem ser adicionadas aqui com o

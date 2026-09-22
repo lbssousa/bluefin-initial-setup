@@ -10,9 +10,10 @@ Também cobre o [Bluefin Dakota](https://docs.projectbluefin.io/dakota/)
 
 Cada automação é um playbook próprio em `playbooks/` (ou um submódulo git
 em `external/`), importado por `site.yml` via `ansible.builtin.import_playbook`
-— todas rodam dentro do mesmo `--ask-become-pass`, mas cada uma tem sua
-própria tag: rode só uma com `--tags <tag>`, ou pule uma com
-`--skip-tags <tag>`.
+— todas compartilham a mesma escalação de privilégio (`run0`, veja a seção
+["Privilégio: run0 --empower"](#privilégio-run0---empower) abaixo), mas
+cada uma tem sua própria tag: rode só uma com `--tags <tag>`, ou pule uma
+com `--skip-tags <tag>`.
 
 ## O que este playbook faz
 
@@ -62,8 +63,7 @@ própria tag: rode só uma com `--tags <tag>`, ou pule uma com
    `security/yubikey/setup.sh`, legado, que editava
    `/etc/pam.d/system-auth` via `sed` e desativava o `authselect`).
    Cada etapa é selecionável com sua própria tag, para rodar isolada
-   (`ansible-playbook site.yml --ask-become-pass --tags
-   yubikey-enroll`):
+   (`ansible-playbook site.yml --tags yubikey-enroll`):
    - `yubikey-enroll` — registra a primeira YubiKey em
      `~/.config/Yubico/u2f_keys` (pula se já existir).
    - `yubikey-setup-pam` / `yubikey-mode-replace` — aplicam o mesmo
@@ -82,7 +82,12 @@ própria tag: rode só uma com `--tags <tag>`, ou pule uma com
      suspender/retomar a máquina com ela conectada.
    - `yubikey-mode-2fa` — perfil `authselect` com YubiKey + senha
      obrigatórios.
-   - `yubikey-test` — testa a autenticação via `sudo`.
+   - `yubikey-test` — testa a autenticação via `run0` (o mecanismo de
+     escalação de privilégio deste repositório — veja "Privilégio:
+     run0 --empower" abaixo). Rode esta tag isolada, sem
+     `run-empowered.sh`, para um teste de verdade: dentro de `just
+     yubikey` o processo já está autenticado, e a chamada passaria sem
+     exercitar a YubiKey.
    - `yubikey-reset` — restaura o backup `authselect` mais antigo do
      YubiKey (ou o perfil base, se não houver backup).
    - `keepassxc-yubikey-lock` — instala uma regra udev que trava todas
@@ -147,9 +152,10 @@ própria tag: rode só uma com `--tags <tag>`, ou pule uma com
    digitais Goodix 27c6:538d, executando a automação do repositório
    separado [lbssousa/bluefin-distrobox-libfprint](https://github.com/lbssousa/bluefin-distrobox-libfprint)
    (trazido aqui como submódulo git, via `ansible.builtin.import_playbook`,
-   então roda dentro do mesmo `--ask-become-pass`). Requer o submódulo
-   inicializado antes (`git submodule update --init --recursive`, ou
-   simplesmente `just libfprint`, que faz isso sozinho).
+   então roda dentro da mesma escalação de privilégio via run0). Requer
+   o submódulo inicializado antes (`git submodule update --init
+   --recursive`, ou simplesmente `just libfprint`, que faz isso
+   sozinho).
 9. **Caps Lock via kanata** (`playbooks/capslock.yml`, tag `capslock`) — instala o
    [kanata](https://github.com/jtroo/kanata) via Homebrew e remapeia o
    Caps Lock a nível evdev: toque rápido vira `Esc`, segurado vira
@@ -281,7 +287,7 @@ só configura o Podman como runtime de dev containers do Zed
 ```bash
 just setup-dakota                    # tudo, exceto Bitwarden e libfprint — como o `just setup` clássico
 just <tag>-dakota                    # uma automação isolada, ex.: just libfprint-dakota
-ansible-playbook site-dakota.yml --ask-become-pass --tags yubikey-gpg-import
+ansible-playbook site-dakota.yml --tags yubikey-gpg-import   # sem become: roda sem run-empowered.sh
 ```
 
 Não depende do submódulo git (`external/bluefin-distrobox-libfprint`) —
@@ -298,7 +304,7 @@ garantia.
 para reverter automações específicas:
 
 ```bash
-ansible-playbook uninstall.yml --ask-become-pass --tags bitwarden-polkit
+./run-empowered.sh ansible-playbook uninstall.yml --tags bitwarden-polkit
 ```
 
 Cobre a remoção da polkit action do Bitwarden (equivalente ao antigo
@@ -353,12 +359,49 @@ migrar para `ansible-vault`.
   (padrão nas imagens uBlue/Bluefin com o *homebrew module* habilitado).
 - [`just`](https://github.com/casey/just) (opcional, mas recomendado —
   também instalável via `brew install just`).
-- `sudo` com senha interativa (a instalação da polkit action e o reload
-  do polkit pedem confirmação).
+- `run0` (parte do systemd ≥259, veja
+  [systemd/run0](https://www.freedesktop.org/software/systemd/man/latest/run0.html))
+  e um usuário no grupo `wheel` — veja
+  ["Privilégio: run0 --empower"](#privilégio-run0---empower) abaixo.
 
 `ansible` **não** precisa estar pré-instalado: `just setup` instala via
 Homebrew automaticamente se faltar, junto da collection `community.general`
-(que fornece os módulos de Flatpak e Homebrew usados aqui).
+(que fornece os módulos de Flatpak e Homebrew usados aqui, além do
+become plugin `community.general.run0`).
+
+### Privilégio: run0 --empower
+
+Tarefas privilegiadas escalam via [`run0`](https://www.freedesktop.org/software/systemd/man/latest/run0.html)
+(o become plugin `community.general.run0`, definido como `become_method`
+em `ansible.cfg`). O run0 autentica via polkit, e o GNOME (Bluefin
+clássico e Dakota igualmente) registra um agente polkit gráfico, então
+um `run0` isolado abriria um diálogo de autenticação para **cada**
+tarefa privilegiada, e o polkit não retém a autorização entre processos
+`run0` separados. Uma execução completa tem dezenas de tarefas
+privilegiadas.
+
+Por isso, toda receita que precisa de root roda o `ansible-playbook`
+através de [`run-empowered.sh`](run-empowered.sh), ou seja, sob `run0
+--empower`: o playbook continua rodando como o seu usuário (mesmo
+`$HOME`, `systemctl --user`...), mas com todas as capabilities e o
+grupo `empower`, para o qual a regra polkit de fábrica do systemd
+permite qualquer ação. Você autentica **uma vez**, no diálogo do
+polkit que aparece no início (impressão digital ou senha, o que o
+diálogo oferecer), e o `run0 --user=root` de cada tarefa `become: true`
+passa sem pedir de novo. Não existe `--ask-become-pass`: nenhuma senha
+é repassada ao run0.
+
+Nada persiste: nenhuma regra polkit concedendo root sem senha é
+instalada, e os privilégios vivem só naquela árvore de processos
+enquanto ela roda. Segundo o `run0(1)`, outros processos não
+privilegiados do seu usuário têm privilégios sobre um processo
+empowered, então evite rodar isso com software não confiável em
+execução na sua sessão.
+
+Cuidado com terminais escondidos/não-assistidos: o diálogo precisa de
+alguém na tela. Uma chamada sem humano presente deve passar
+`ansible_become_flags=--no-ask-password` (ou usar `run0
+--no-ask-password`) para falhar rápido em vez de esperar.
 
 ## Uso
 
@@ -377,10 +420,10 @@ Ou diretamente com Ansible:
 
 ```bash
 ansible-galaxy collection install -r requirements.yml
-ansible-playbook site.yml --ask-become-pass
+./run-empowered.sh ansible-playbook site.yml
 # opcional, só para o libfprint (tag `never`, não roda no comando acima):
 git submodule update --init --recursive
-ansible-playbook site.yml --ask-become-pass --tags libfprint
+./run-empowered.sh ansible-playbook site.yml --tags libfprint
 ```
 
 O playbook é idempotente — rodar de novo é seguro e só aplica o que
@@ -393,6 +436,8 @@ ainda não estiver no estado desejado.
 | `site.yml`               | Índice: importa cada `playbooks/*.yml` com sua tag (Fedora Atomic clássico) |
 | `site-dakota.yml`        | Mesmo índice para o Bluefin Dakota — veja a seção "Bluefin Dakota" acima |
 | `uninstall.yml`          | Desinstalação — playbook independente, tags por automação        |
+| `ansible.cfg`            | Config do Ansible — `become_method = community.general.run0` (veja "Privilégio: run0 --empower" acima) |
+| `run-empowered.sh`       | Roda o `ansible-playbook` sob `run0 --empower`: uma autenticação polkit, depois as tarefas privilegiadas passam (veja "Privilégio" acima) |
 | `playbooks/bitwarden.yml` | Bitwarden — Flatpak + agente SSH + polkit (tag `bitwarden`, não roda por padrão) |
 | `playbooks/homebrew.yml`  | Tap `ublue-os` + VSCode/Zed (tag `homebrew`)                    |
 | `playbooks/zed.yml`       | Podman como runtime de dev containers no Zed (tag `zed`)         |
@@ -431,3 +476,5 @@ ainda não estiver no estado desejado.
 - Trava do KeePassXC ao remover a YubiKey baseada em
   [lbssousa/nix-config](https://github.com/lbssousa/nix-config)
   (`modules/system/security/keepassxc-yubikey-lock.nix`).
+- `run-empowered.sh` e a escalação de privilégio via `run0 --empower`
+  portados de [lbssousa/omarchy-setup](https://github.com/lbssousa/omarchy-setup).
