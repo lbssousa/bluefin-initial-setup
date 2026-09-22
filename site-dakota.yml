@@ -12,10 +12,15 @@
 # — não precisam de nenhuma adaptação para o Dakota.
 #
 # NÃO importa playbooks/homebrew.yml (tap ublue-os + casks do VSCode/Zed):
-# no Dakota, a instalação do VSCode e do Zed já é gerenciada pelo `ujust`
-# da própria imagem, então esse playbook seria redundante ali. O
-# playbooks/zed.yml abaixo continua rodando — ele só configura o Podman
-# como runtime de dev containers do Zed (settings.json), não instala nada.
+# no Dakota, o Zed continua gerenciado pelo `ujust` da própria imagem,
+# então esse playbook (que também instalaria o Zed) seria redundante
+# ali. O playbooks/zed.yml abaixo continua rodando — ele só configura o
+# Podman como runtime de dev containers do Zed (settings.json), não
+# instala nada.
+#
+# O VSCode NÃO é mais instalado via `ujust`/Homebrew aqui — veja
+# playbooks/dakota/vscode.yml abaixo, que instala via snap (pressupõe
+# snapd já disponível no host; falha graciosamente se não estiver).
 #
 # Rode só uma automação com `--tags <tag>`, ou pule uma com
 # `--skip-tags <tag>`.
@@ -32,6 +37,19 @@
   # --tags — só sob pedido explícito (--tags bitwarden / `just bitwarden-dakota`).
   ansible.builtin.import_playbook: playbooks/bitwarden.yml
   tags: [bitwarden, never]
+
+- name: VSCode no Dakota — instalação via snap
+  ansible.builtin.import_playbook: playbooks/dakota/vscode.yml
+  tags: [vscode]
+
+- name: Proton Pass CLI + injeção das chaves SSH no agente ativo
+  # tag "never" (como o Bitwarden acima): não roda em `ansible-playbook
+  # site-dakota.yml` sem --tags — só sob pedido explícito (--tags
+  # proton-pass / `just proton-pass-dakota`), escolha específica de
+  # gerenciador de senhas. Mesmo arquivo usado por site.yml — Homebrew
+  # já vem pré-instalado no Dakota, nenhuma adaptação necessária.
+  ansible.builtin.import_playbook: playbooks/proton-pass.yml
+  tags: [proton-pass, never]
 
 - name: Zed — Podman como runtime de dev containers
   ansible.builtin.import_playbook: playbooks/zed.yml

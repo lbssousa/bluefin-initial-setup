@@ -1,0 +1,107 @@
+---
+# Proton Pass CLI — instalado via Homebrew (fórmula oficial
+# "proton-pass-cli", binário `pass-cli`, sem tap:
+# formulae.brew.sh/formula/proton-pass-cli) + serviço systemd --user que,
+# na inicialização da sessão, injeta as chaves SSH do cofre do Proton
+# Pass no agente SSH JÁ ATIVO (`pass-cli ssh-agent load` —
+# protonpass.github.io/pass-cli/commands/ssh-agent/ — que usa
+# SSH_AUTH_SOCK, ao contrário de `ssh-agent start`, que faria o pass-cli
+# rodar como agente próprio e competiria com o do Bitwarden configurado
+# em playbooks/bitwarden.yml).
+#
+# MESMO ARQUIVO usado por site.yml e site-dakota.yml — instalação 100%
+# via Homebrew (user-level, sem root), idêntica nos dois sistemas.
+#
+# Tag "never" (como o Bitwarden acima): não roda por padrão em
+# `ansible-playbook site.yml`/`site-dakota.yml` sem --tags — escolha
+# específica de gerenciador de senhas, não algo que toda máquina usa.
+#
+# Pré-requisito FORA do escopo desta automação (interativo, como o login
+# do Bitwarden/YubiKey): depois de instalado, autentique uma vez com
+# `pass-cli login` para o serviço conseguir acessar o cofre — sem isso,
+# `pass-cli ssh-agent load` falha silenciosamente por falta de
+# credenciais no keychain do sistema (mesmo aviso da documentação
+# oficial para o modo daemon).
+#
+# playbooks/templates/proton-pass-ssh-agent-load.sh.j2: o script
+# instalado como ExecStart do serviço espera (poll, até
+# proton_pass_ssh_agent_wait_seconds segundos) o socket de um agente SSH
+# ativo aparecer antes de chamar `pass-cli ssh-agent load` — cobre o
+# caso deste serviço iniciar antes do agente da sessão (ex.: o Bitwarden
+# só cria o socket quando o app abre); se o tempo esgotar, avisa e sai
+# sem erro (mesmo raciocínio de "avisar e pular" usado em
+# playbooks/keepassxc.yml e playbooks/dakota/vscode.yml).
+- name: Proton Pass CLI + injeção das chaves SSH no agente ativo
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  pre_tasks:
+    - name: Garantir que o Homebrew (linuxbrew) está disponível
+      ansible.builtin.stat:
+        path: "{{ homebrew_prefix }}/bin/brew"
+      register: brew_bin
+
+    - name: Falhar com orientação se o Homebrew não for encontrado
+      ansible.builtin.fail:
+        msg: >-
+          Homebrew não encontrado em {{ homebrew_prefix }}. Nas imagens
+          uBlue/Bluefin ele já vem pré-instalado; em outras, instale-o
+          primeiro (https://brew.sh).
+      when: not brew_bin.stat.exists
+
+  tasks:
+    - name: Proton Pass CLI + agente SSH
+      block:
+        - name: Instalar o Proton Pass CLI via Homebrew
+          community.general.homebrew:
+            name: "{{ proton_pass_cli_formula }}"
+            state: present
+
+        - name: Garantir que ~/.local/bin existe
+          ansible.builtin.file:
+            path: "{{ proton_pass_ssh_agent_load_script_dest | dirname }}"
+            state: directory
+            mode: "0755"
+
+        - name: Instalar o script que injeta as chaves SSH do Proton Pass no agente ativo
+          ansible.builtin.template:
+            src: proton-pass-ssh-agent-load.sh.j2
+            dest: "{{ proton_pass_ssh_agent_load_script_dest }}"
+            mode: "0755"
+          notify: restart proton-pass-ssh-agent-load
+
+        - name: Garantir que ~/.config/systemd/user existe
+          ansible.builtin.file:
+            path: "{{ ansible_facts.env.HOME }}/.config/systemd/user"
+            state: directory
+            mode: "0755"
+
+        - name: Instalar o serviço systemd --user que injeta as chaves na inicialização da sessão
+          ansible.builtin.template:
+            src: proton-pass-ssh-agent-load.service.j2
+            dest: "{{ ansible_facts.env.HOME }}/.config/systemd/user/{{ proton_pass_ssh_agent_load_unit }}"
+            mode: "0644"
+          notify: reload systemd --user (proton-pass)
+
+        - name: Habilitar o serviço de injeção de chaves SSH do Proton Pass
+          ansible.builtin.systemd:
+            name: "{{ proton_pass_ssh_agent_load_unit }}"
+            scope: user
+            daemon_reload: true
+            enabled: true
+            state: started
+
+  handlers:
+    - name: reload systemd --user (proton-pass)
+      ansible.builtin.systemd:
+        daemon_reload: true
+        scope: user
+      listen: reload systemd --user (proton-pass)
+
+    - name: restart proton-pass-ssh-agent-load
+      ansible.builtin.systemd:
+        name: "{{ proton_pass_ssh_agent_load_unit }}"
+        scope: user
+        state: restarted
+      listen: restart proton-pass-ssh-agent-load

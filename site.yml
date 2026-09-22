@@ -26,6 +26,13 @@
   ansible.builtin.import_playbook: playbooks/homebrew.yml
   tags: [homebrew]
 
+- name: Proton Pass CLI + injeção das chaves SSH no agente ativo
+  # tag "never" (como o Bitwarden acima): não roda em `ansible-playbook
+  # site.yml` sem --tags — só sob pedido explícito (--tags proton-pass /
+  # `just proton-pass`), escolha específica de gerenciador de senhas.
+  ansible.builtin.import_playbook: playbooks/proton-pass.yml
+  tags: [proton-pass, never]
+
 - name: Zed — Podman como runtime de dev containers
   ansible.builtin.import_playbook: playbooks/zed.yml
   tags: [zed]
