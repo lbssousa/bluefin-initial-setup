@@ -20,13 +20,11 @@ _ensure-collections: _ensure-ansible
 _ensure-submodules:
     git submodule update --init --recursive
 
-# Run the initial setup playbook.
-setup: _ensure-collections _ensure-submodules
+# Run the initial setup playbook. Bitwarden and libfprint have tag
+# "never" in site.yml, so they don't run here — only via `just bitwarden`
+# / `just libfprint` (the latter also needs the submodule, see below).
+setup: _ensure-collections
     ansible-playbook site.yml --ask-become-pass
-
-# Same as setup, but skips the libfprint build (for machines without that reader).
-setup-no-libfprint: _ensure-collections _ensure-submodules
-    ansible-playbook site.yml --ask-become-pass --skip-tags libfprint
 
 # Fedora Atomic (Bluefin/uBlue classic) — run a single automation by its site.yml tag.
 bitwarden: _ensure-collections

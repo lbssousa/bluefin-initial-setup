@@ -5,6 +5,18 @@
 # security/yubikey/setup.sh legado, que editava /etc/pam.d/system-auth
 # via sed e desativava o authselect).
 #
+# Também inclui (tag keepassxc-yubikey-lock, no fim do arquivo) o
+# gatilho que trava o KeePassXC ao remover a YubiKey da porta USB —
+# mora aqui, não em playbooks/keepassxc.yml, porque é disparado pela
+# YubiKey (regra udev casando o vendor Yubico), não por nada específico
+# do KeePassXC. Ao contrário das etapas de PAM acima, essa tarefa NÃO
+# falha se o KeePassXC não estiver instalado: como esta automação roda
+# junto com as demais tags deste arquivo sob a tag guarda-chuva
+# `yubikey` (`site.yml`/`site-dakota.yml`), um `ansible.builtin.fail`
+# aqui interromperia o host para TODAS as plays seguintes de
+# site.yml/site-dakota.yml (bash.yml incluso) — em vez disso, ela avisa
+# e pula.
+#
 # A instalação do pacote pam-u2f fica FORA do escopo desta automação:
 # o feature nativo "with-pam-u2f" do authselect espera o pam_u2f.so no
 # caminho padrão do sistema, só alcançável via rpm-ostree install — o
@@ -15,7 +27,7 @@
 #   sudo rpm-ostree install --idempotent pam-u2f
 #   brew install libfido2
 # seguido de reinicialização.
-- name: YubiKey FIDO2/U2F
+- name: YubiKey FIDO2/U2F + trava do KeePassXC ao remover a YubiKey
   hosts: localhost
   connection: local
   gather_facts: true
@@ -48,6 +60,20 @@
         pam_u2f_check.rc | default(1) != 0 or
         pamu2fcfg_check.rc | default(1) != 0
       tags: [yubikey-enroll, yubikey-setup-pam, yubikey-mode-replace, yubikey-mode-2fa, yubikey-test]
+
+    - name: Verificar se o KeePassXC está instalado (Flatpak)
+      ansible.builtin.command: flatpak info org.keepassxc.KeePassXC
+      register: keepassxc_flatpak_check
+      changed_when: false
+      failed_when: false
+      tags: [keepassxc-yubikey-lock]
+
+    - name: Verificar se o KeePassXC está instalado (binário no PATH)
+      ansible.builtin.command: which keepassxc
+      register: keepassxc_bin_check
+      changed_when: false
+      failed_when: false
+      tags: [keepassxc-yubikey-lock]
 
   tasks:
     # ── Registro da primeira YubiKey ──────────────────────────────────
@@ -110,7 +136,20 @@
               ((yubikey_authselect_base_features + ['with-pam-u2f']) | sort)
           changed_when: true
 
-    # ── pcscd — corrige race condition com udev no boot ───────────────
+    # ── pcscd — corrige a YubiKey ficando invisível para o GnuPG ──────
+    # Dois problemas distintos do pcsc-lite, ambos exigindo hoje um
+    # `systemctl restart pcscd` manual sem esta automação:
+    #   1. Corrida com o udev no BOOT (drop-in ExecStartPre=udevadm
+    #      settle) — o pcscd inicia antes do kernel/udev terminarem de
+    #      configurar o leitor CCID da YubiKey já conectada.
+    #   2. pcscd não reconhecendo a YubiKey ao reconectar (replug) ou
+    #      após suspender/retomar a máquina (regra udev
+    #      yubikey-pcscd-restart.rules, ACTION=="add") — bug conhecido
+    #      do pcsc-lite, não específico deste repositório; mais comum
+    #      na prática que o problema (1), já que cobre qualquer momento
+    #      depois do boot. Veja
+    #      playbooks/templates/yubikey-pcscd-restart.rules.j2 para
+    #      detalhes.
     - name: pcscd — aguardar udev settle no boot (YubiKey + GPG)
       tags: [yubikey-setup-pcscd]
       become: true
@@ -131,6 +170,17 @@
           notify:
             - reload systemd
             - restart pcscd
+
+        - name: Instalar a regra udev que reinicia o pcscd ao (re)conectar a YubiKey
+          ansible.builtin.template:
+            src: yubikey-pcscd-restart.rules.j2
+            dest: "{{ yubikey_pcscd_restart_udev_rule_dest }}"
+            owner: root
+            group: root
+            mode: "0644"
+          notify:
+            - reload udev rules
+            - trigger udev
 
     # ── Modo 2FA (YubiKey + senha obrigatórios) ───────────────────────
     - name: PAM via authselect — modo 2FA (YubiKey + senha)
@@ -232,6 +282,69 @@
             yubikey_backups.matched | default(0) == 0
           changed_when: true
 
+    # ── KeePassXC — travar ao remover a YubiKey ────────────────────────
+    # Trava todas as bases do KeePassXC quando a YubiKey é removida da
+    # porta USB (evento udev "remove"), via chamada D-Bus a
+    # org.keepassxc.KeePassXC.MainWindow.lockAllDatabases. Portado de
+    # lbssousa/nix-config (modules/system/security/keepassxc-yubikey-lock.nix)
+    # — mesmo mecanismo (script chamado por regra udev via systemd-run),
+    # adaptado para um único usuário (o que roda este Ansible), não a
+    # lista de usuários configurável do módulo NixOS original.
+    #
+    # A instalação do KeePassXC fica FORA do escopo desta automação
+    # (mesmo raciocínio do pam-u2f acima): assume-se que o KeePassXC já
+    # está instalado e rodando com a integração D-Bus habilitada (ativa
+    # por padrão em Ferramentas > Configurações > Geral). Diferente do
+    # pam-u2f, porém, a ausência do KeePassXC não é fatal aqui — ver
+    # nota no cabeçalho do arquivo — a tarefa é simplesmente pulada.
+    #
+    # Desvio proposital do nix-config original: a regra udev casa
+    # ENV{PRODUCT}=="1050/*" (qualquer produto do vendor Yubico), em vez
+    # do produto específico "1050/407" hardcoded lá — cobre qualquer
+    # modelo de YubiKey que o usuário conecte. Ver o cabeçalho de
+    # playbooks/templates/keepassxc-yubikey-lock.rules.j2 para detalhes.
+    - name: KeePassXC — travar ao remover a YubiKey
+      become: true
+      tags: [keepassxc-yubikey-lock]
+      when: keepassxc_flatpak_check.rc == 0 or keepassxc_bin_check.rc == 0
+      block:
+        - name: Garantir que o diretório de destino do script existe
+          ansible.builtin.file:
+            path: "{{ keepassxc_yubikey_lock_script_dest | dirname }}"
+            state: directory
+            mode: "0755"
+
+        - name: Instalar o script de travamento via D-Bus
+          ansible.builtin.copy:
+            src: keepassxc-yubikey-lock.sh
+            dest: "{{ keepassxc_yubikey_lock_script_dest }}"
+            owner: root
+            group: root
+            mode: "0755"
+
+        - name: Instalar a regra udev (dispara na remoção da YubiKey)
+          ansible.builtin.template:
+            src: keepassxc-yubikey-lock.rules.j2
+            dest: "{{ keepassxc_yubikey_lock_udev_rule_dest }}"
+            owner: root
+            group: root
+            mode: "0644"
+          notify:
+            - reload udev rules
+            - trigger udev
+
+    - name: Avisar que o KeePassXC não foi encontrado (trava ao remover a YubiKey pulada)
+      ansible.builtin.debug:
+        msg: >-
+          KeePassXC não encontrado (nem via Flatpak
+          org.keepassxc.KeePassXC, nem no PATH) — pulando a automação
+          de trava ao remover a YubiKey. Instale o KeePassXC, habilite
+          Ferramentas > Configurações > Geral > "Habilitar integração
+          com D-Bus" (ativa por padrão) e rode de novo com --tags
+          keepassxc-yubikey-lock para habilitá-la.
+      tags: [keepassxc-yubikey-lock]
+      when: keepassxc_flatpak_check.rc != 0 and keepassxc_bin_check.rc != 0
+
   handlers:
     - name: reload systemd
       ansible.builtin.systemd:
@@ -245,3 +358,13 @@
         state: restarted
       become: true
       listen: restart pcscd
+
+    - name: reload udev rules
+      ansible.builtin.command: udevadm control --reload-rules
+      changed_when: false
+      listen: reload udev rules
+
+    - name: trigger udev
+      ansible.builtin.command: udevadm trigger
+      changed_when: false
+      listen: trigger udev

@@ -55,7 +55,7 @@ própria tag: rode só uma com `--tags <tag>`, ou pule uma com
    dotfiles/stow ou edição manual —, nunca é sobrescrito, já que tende a
    acumular preferências pessoais (tema, fonte, keybindings) ao longo do
    tempo.
-4. **YubiKey FIDO2/U2F** (`playbooks/yubikey.yml`, tag `yubikey`) —
+4. **YubiKey FIDO2/U2F** (`playbooks/yubikey.yml`, tag guarda-chuva `yubikey`) —
    migrado das receitas `yubikey-*` do `just/.justfile` de
    [lbssousa/dotfiles](https://github.com/lbssousa/dotfiles) (fluxo
    atual, baseado em `authselect` gerenciado — não do script
@@ -69,20 +69,48 @@ própria tag: rode só uma com `--tags <tag>`, ou pule uma com
    - `yubikey-setup-pam` / `yubikey-mode-replace` — aplicam o mesmo
      perfil `authselect` (YubiKey substitui a senha); duas tags para a
      mesma ação, espelhando as duas receitas equivalentes do Justfile.
-   - `yubikey-setup-pcscd` — drop-in systemd que evita uma race
-     condition entre o `pcscd` e o `udev` no boot.
+   - `yubikey-setup-pcscd` — corrige a YubiKey ficando invisível para o
+     GnuPG (`gpg --card-status` sem cartão) até reiniciar o `pcscd` na
+     mão — bug conhecido do `pcsc-lite`, não específico deste
+     repositório, que afeta Fedora Atomic, Bluefin, Dakota e outras
+     distros. Duas automações: um drop-in systemd
+     (`ExecStartPre=udevadm settle`) que evita uma race condition entre
+     o `pcscd` e o `udev` no boot, e uma regra udev que reinicia o
+     `pcscd` sempre que uma YubiKey é conectada (`ACTION=="add"`,
+     vendor Yubico `1050`) — cobre o caso mais comum na prática:
+     plugar a YubiKey depois do boot, trocar de porta USB, ou
+     suspender/retomar a máquina com ela conectada.
    - `yubikey-mode-2fa` — perfil `authselect` com YubiKey + senha
      obrigatórios.
    - `yubikey-test` — testa a autenticação via `sudo`.
    - `yubikey-reset` — restaura o backup `authselect` mais antigo do
      YubiKey (ou o perfil base, se não houver backup).
+   - `keepassxc-yubikey-lock` — instala uma regra udev que trava todas
+     as bases do KeePassXC (via D-Bus,
+     `org.keepassxc.KeePassXC.MainWindow.lockAllDatabases`) sempre que a
+     YubiKey é desconectada da porta USB. A regra casa qualquer YubiKey
+     pelo vendor ID da Yubico (`1050`), não um modelo específico —
+     desvio proposital da configuração de referência em
+     [lbssousa/nix-config](https://github.com/lbssousa/nix-config)
+     (`modules/system/security/keepassxc-yubikey-lock.nix`), que trava
+     num único modelo. Mora aqui (não em `playbooks/keepassxc.yml`)
+     porque é disparada pela YubiKey, não por algo específico do
+     KeePassXC. **Se o KeePassXC não estiver instalado, a tarefa avisa
+     e pula** em vez de falhar — ao contrário do `pam-u2f` abaixo, essa
+     ausência não é fatal, já que um `ansible.builtin.fail` aqui
+     interromperia o host para as plays seguintes de
+     `site.yml`/`site-dakota.yml` (`bash.yml` incluso).
 
-   **A instalação do pacote `pam-u2f` fica fora do escopo**: o feature
-   nativo `with-pam-u2f` do `authselect` espera o `pam_u2f.so` no
-   caminho padrão do sistema, só alcançável via `rpm-ostree install` —
-   o que violaria a regra deste repositório de nunca usar rpm-ostree.
-   Instale antes, manualmente (`just yubikey-install` no dotfiles, ou
-   `rpm-ostree install pam-u2f` + `brew install libfido2` + reboot).
+   **A instalação do pacote `pam-u2f` fica fora do escopo** (das etapas
+   de PAM acima): o feature nativo `with-pam-u2f` do `authselect`
+   espera o `pam_u2f.so` no caminho padrão do sistema, só alcançável
+   via `rpm-ostree install` — o que violaria a regra deste repositório
+   de nunca usar rpm-ostree. Instale antes, manualmente (`just
+   yubikey-install` no dotfiles, ou `rpm-ostree install pam-u2f` +
+   `brew install libfido2` + reboot). A instalação do **KeePassXC**
+   também fica fora do escopo (mesmo raciocínio) — pressupõe-se o app
+   já instalado, com a integração D-Bus habilitada (ativa por padrão em
+   Ferramentas → Configurações → Geral).
 5. **Usuários adicionais** (`playbooks/users.yml`, tag `users`) — cria as contas listadas em
    `group_vars/all/local_users.yml` (arquivo local, fora do git — veja a
    seção [Dados privados](#dados-privados-usuários-adicionais) abaixo).
@@ -114,13 +142,14 @@ própria tag: rode só uma com `--tags <tag>`, ou pule uma com
    plugins depois — veja `nvim/lua/plugins/*.lua` em
    [lbssousa/dotfiles](https://github.com/lbssousa/dotfiles)). Uma
    config já existente nunca é sobrescrita.
-8. **libfprint (goodix538d)** (submódulo `external/bluefin-distrobox-libfprint`, tag `libfprint`) — compila e instala o driver do leitor de
+8. **libfprint (goodix538d)** (submódulo `external/bluefin-distrobox-libfprint`, tag `libfprint`, **não roda por padrão** — tag `never`,
+   só sob pedido explícito: `--tags libfprint` / `just libfprint` / `just libfprint-dakota`) — compila e instala o driver do leitor de
    digitais Goodix 27c6:538d, executando a automação do repositório
    separado [lbssousa/bluefin-distrobox-libfprint](https://github.com/lbssousa/bluefin-distrobox-libfprint)
    (trazido aqui como submódulo git, via `ansible.builtin.import_playbook`,
-   então roda dentro do mesmo `--ask-become-pass`). Em máquinas sem esse
-   leitor, pule com `ansible-playbook site.yml --ask-become-pass
-   --skip-tags libfprint` (ou `just setup-no-libfprint`).
+   então roda dentro do mesmo `--ask-become-pass`). Requer o submódulo
+   inicializado antes (`git submodule update --init --recursive`, ou
+   simplesmente `just libfprint`, que faz isso sozinho).
 9. **Caps Lock via kanata** (`playbooks/capslock.yml`, tag `capslock`) — instala o
    [kanata](https://github.com/jtroo/kanata) via Homebrew e remapeia o
    Caps Lock a nível evdev: toque rápido vira `Esc`, segurado vira
@@ -135,37 +164,29 @@ própria tag: rode só uma com `--tags <tag>`, ou pule uma com
    (`modules/system/core/localization.nix`). Mesmo raciocínio do Neovim
    e do Zed acima: `~/.config/kanata/kanata.kbd` só é copiado se ainda
    não existir, nunca sobrescrito.
-10. **KeePassXC** (`playbooks/keepassxc.yml`, tag guarda-chuva `keepassxc`) — dois blocos independentes,
-    cada um com sua própria sub-tag:
-    - `keepassxc-yubikey-lock` — instala uma regra udev que trava todas
-      as bases do KeePassXC (via D-Bus,
-      `org.keepassxc.KeePassXC.MainWindow.lockAllDatabases`) sempre que a
-      YubiKey é desconectada da porta USB. A regra casa qualquer YubiKey
-      pelo vendor ID da Yubico (`1050`), não um modelo específico —
-      desvio proposital da configuração de referência em
-      [lbssousa/nix-config](https://github.com/lbssousa/nix-config)
-      (`modules/system/security/keepassxc-yubikey-lock.nix`), que trava
-      num único modelo.
-    - `keepassxc-browser` — ponte de *native messaging* entre o Flatpak
-      do KeePassXC e os Flatpaks dos navegadores suportados (Firefox,
-      Chrome, Brave, Chromium, Edge — lista em
-      `keepassxc_native_messaging_targets` em `group_vars/all/main.yml`),
-      para a extensão [KeePassXC-Browser](https://github.com/keepassxreboot/keepassxc-browser)
-      funcionar. Cada Flatpak só enxerga o próprio diretório de dados
-      (`~/.var/app/<id>/...`) e não consegue spawnar diretamente um
-      processo de outro Flatpak; por isso instala, DENTRO do diretório
-      de dados de cada navegador já instalado, um manifesto de native
-      messaging e um script wrapper que usa `flatpak-spawn --host` para
-      rodar o `keepassxc-proxy` do Flatpak do KeePassXC no host, e
-      concede a permissão `--talk-name=org.freedesktop.Flatpak`
-      necessária para isso. Roda igual no Fedora e no Dakota (mecanismo
-      100% Flatpak/D-Bus, independente da base do sistema) — ainda não
-      validado em hardware real.
+10. **KeePassXC — ponte de native messaging** (`playbooks/keepassxc.yml`, tag `keepassxc-browser`,
+    também coberta pela tag `keepassxc`) — ponte de *native messaging*
+    entre o Flatpak do KeePassXC e os Flatpaks dos navegadores
+    suportados (Firefox, Chrome, Brave, Chromium, Edge — lista em
+    `keepassxc_native_messaging_targets` em `group_vars/all/main.yml`),
+    para a extensão [KeePassXC-Browser](https://github.com/keepassxreboot/keepassxc-browser)
+    funcionar. Cada Flatpak só enxerga o próprio diretório de dados
+    (`~/.var/app/<id>/...`) e não consegue spawnar diretamente um
+    processo de outro Flatpak; por isso instala, DENTRO do diretório de
+    dados de cada navegador já instalado, um manifesto de native
+    messaging e um script wrapper que usa `flatpak-spawn --host` para
+    rodar o `keepassxc-proxy` do Flatpak do KeePassXC no host, e
+    concede a permissão `--talk-name=org.freedesktop.Flatpak`
+    necessária para isso. Roda igual no Fedora e no Dakota (mecanismo
+    100% Flatpak/D-Bus, independente da base do sistema) — ainda não
+    validado em hardware real.
 
-    **A instalação do KeePassXC fica fora do escopo** dos dois blocos
-    (mesmo raciocínio do `pam-u2f` no item YubiKey acima): pressupõem o
-    app já instalado, com a integração D-Bus habilitada (ativa por
-    padrão em Ferramentas → Configurações → Geral).
+    A instalação do KeePassXC fica fora do escopo (mesmo raciocínio do
+    `pam-u2f` no item YubiKey acima), e aqui **a ausência dele é
+    fatal**: se não estiver instalado, esta automação falha com
+    orientação em vez de pular — ao contrário da trava ao remover a
+    YubiKey (item 4 acima), que agora mora em `playbooks/yubikey.yml` e
+    falha graciosamente.
 11. **Bash com cara de Fish** (`playbooks/bash.yml`, tag guarda-chuva `bash`) — dois blocos
     independentes, cada um com sua própria sub-tag:
     - `bash-completion` — autocomplete case-insensitive
@@ -211,16 +232,21 @@ PAM). Ainda em alpha. Por isso existe `site-dakota.yml`, espelhando
 
 - **YubiKey** (`playbooks/dakota/yubikey.yml`) — sem `authselect` no
   Dakota (e sem substituto documentado ainda), este arquivo **não mexe
-  em PAM**. Mantém só o que é OS-agnóstico: o fix de race condition do
-  `pcscd` (tag `yubikey-setup-pcscd`) e uma tarefa nova, `yubikey-gpg-import`,
+  em PAM**. Mantém só o que é OS-agnóstico: o fix da YubiKey ficando
+  invisível para o GnuPG até reiniciar o `pcscd` na mão (tag
+  `yubikey-setup-pcscd`), uma tarefa nova, `yubikey-gpg-import`,
   que importa a chave pública OpenPGP do cartão da YubiKey
-  (`gpg --card-status` + `gpg --edit-card fetch`) para o keyring local.
-  As etapas de PAM/authselect de `playbooks/yubikey.yml`
-  (`yubikey-enroll`, `yubikey-setup-pam`, `yubikey-mode-replace`,
-  `yubikey-mode-2fa`, `yubikey-test`, `yubikey-reset`) **não têm
-  equivalente no Dakota por enquanto**.
-- **libfprint** (`playbooks/dakota/libfprint.yml`) — build e instalação
-  autocontidos neste repositório, sem depender do submódulo
+  (`gpg --card-status` + `gpg --edit-card fetch`) para o keyring local,
+  e a mesma trava do KeePassXC ao remover a YubiKey (tag
+  `keepassxc-yubikey-lock`) de `playbooks/yubikey.yml` — genérica o
+  bastante para não precisar de nenhuma adaptação aqui. As etapas de
+  PAM/authselect de `playbooks/yubikey.yml` (`yubikey-enroll`,
+  `yubikey-setup-pam`, `yubikey-mode-replace`, `yubikey-mode-2fa`,
+  `yubikey-test`, `yubikey-reset`) **não têm equivalente no Dakota por
+  enquanto**.
+- **libfprint** (`playbooks/dakota/libfprint.yml`, **não roda por padrão** —
+  tag `never`, só sob pedido explícito: `--tags libfprint` / `just
+  libfprint-dakota`) — build e instalação autocontidos neste repositório, sem depender do submódulo
   `external/bluefin-distrobox-libfprint` (cujo README fala
   explicitamente de "desktop Fedora Atomic"). Mesma estratégia (compilar
   o fork [lbssousa/libfprint](https://github.com/lbssousa/libfprint) num
@@ -240,6 +266,10 @@ por padrão no Dakota) são os **mesmos arquivos** usados pelo `site.yml`
 clássico — Homebrew e Podman já vêm pré-instalados nas imagens Dakota,
 então nenhuma adaptação de conteúdo foi necessária.
 
+Assim como no `site.yml` clássico, `bitwarden` e `libfprint` têm tag
+`never` — nenhum dos dois roda com `just setup-dakota` sem pedido
+explícito.
+
 `site-dakota.yml` **não importa** `playbooks/homebrew.yml` (tag
 `homebrew`, sem receita `homebrew-dakota` correspondente): no Dakota, a
 instalação do VSCode e do Zed já é gerenciada pelo `ujust` da própria
@@ -249,7 +279,7 @@ só configura o Podman como runtime de dev containers do Zed
 (`~/.config/zed/settings.json`), não instala o app.
 
 ```bash
-just setup-dakota                    # tudo, exceto Bitwarden — como o `just setup` clássico
+just setup-dakota                    # tudo, exceto Bitwarden e libfprint — como o `just setup` clássico
 just <tag>-dakota                    # uma automação isolada, ex.: just libfprint-dakota
 ansible-playbook site-dakota.yml --ask-become-pass --tags yubikey-gpg-import
 ```
@@ -317,8 +347,8 @@ migrar para `ansible-vault`.
   rede via mDNS — necessário apenas para a automação da impressora;
   pule com `--skip-tags printer` se não for usá-la.
 - `distrobox` (padrão no Bluefin/uBlue) — necessário apenas para a
-  automação do libfprint; pule com `--skip-tags libfprint` se não for
-  usá-la.
+  automação do libfprint, que não roda por padrão (tag `never`); use
+  `--tags libfprint` / `just libfprint` para rodá-la explicitamente.
 - [Homebrew](https://brew.sh) instalado em `/home/linuxbrew/.linuxbrew`
   (padrão nas imagens uBlue/Bluefin com o *homebrew module* habilitado).
 - [`just`](https://github.com/casey/just) (opcional, mas recomendado —
@@ -333,20 +363,24 @@ Homebrew automaticamente se faltar, junto da collection `community.general`
 ## Uso
 
 ```bash
-git clone --recurse-submodules https://github.com/lbssousa/bluefin-initial-setup.git
+git clone https://github.com/lbssousa/bluefin-initial-setup.git
 cd bluefin-initial-setup
 just setup
 ```
 
-(`just setup` também roda `git submodule update --init --recursive` sozinho,
-então `--recurse-submodules` no clone é só uma otimização.)
+(`--recurse-submodules` no clone não é necessário: `just setup` não
+inclui o libfprint, que é a única automação que depende de submódulo
+— veja o item 8 acima. Rodando `just libfprint` depois, o submódulo é
+inicializado automaticamente.)
 
 Ou diretamente com Ansible:
 
 ```bash
-git submodule update --init --recursive
 ansible-galaxy collection install -r requirements.yml
 ansible-playbook site.yml --ask-become-pass
+# opcional, só para o libfprint (tag `never`, não roda no comando acima):
+git submodule update --init --recursive
+ansible-playbook site.yml --ask-become-pass --tags libfprint
 ```
 
 O playbook é idempotente — rodar de novo é seguro e só aplica o que
@@ -362,14 +396,14 @@ ainda não estiver no estado desejado.
 | `playbooks/bitwarden.yml` | Bitwarden — Flatpak + agente SSH + polkit (tag `bitwarden`, não roda por padrão) |
 | `playbooks/homebrew.yml`  | Tap `ublue-os` + VSCode/Zed (tag `homebrew`)                    |
 | `playbooks/zed.yml`       | Podman como runtime de dev containers no Zed (tag `zed`)         |
-| `playbooks/yubikey.yml`   | YubiKey FIDO2/U2F — etapas selecionáveis (tags `yubikey-*`), Fedora/authselect |
+| `playbooks/yubikey.yml`   | YubiKey FIDO2/U2F, Fedora/authselect — etapas selecionáveis (tags `yubikey-*`) + trava do KeePassXC ao remover a YubiKey (tag `keepassxc-yubikey-lock`, falha graciosamente se o KeePassXC não estiver instalado) |
 | `playbooks/users.yml`     | Usuários adicionais (tag `users`)                                |
 | `playbooks/printer.yml`   | Impressora EPSON L4160 driverless (tag `printer`)                |
 | `playbooks/neovim.yml`    | Neovim + LazyVim (tag `neovim`)                                  |
 | `playbooks/capslock.yml`  | Caps Lock via kanata (tag `capslock`)                            |
-| `playbooks/keepassxc.yml` | KeePassXC — trava ao remover a YubiKey + ponte de native messaging (tags `keepassxc-yubikey-lock`/`keepassxc-browser`) |
+| `playbooks/keepassxc.yml` | KeePassXC — ponte de native messaging para o KeePassXC-Browser (tag `keepassxc-browser`); a trava ao remover a YubiKey está em `playbooks/yubikey.yml` |
 | `playbooks/bash.yml`      | Bash com cara de Fish — completion case-insensitive + history-substring-search + ble.sh (tags `bash-completion`/`blesh`) |
-| `playbooks/dakota/yubikey.yml`   | YubiKey no Dakota — só `yubikey-setup-pcscd` + `yubikey-gpg-import`, sem PAM |
+| `playbooks/dakota/yubikey.yml`   | YubiKey no Dakota — `yubikey-setup-pcscd` + `yubikey-gpg-import`, sem PAM; + trava do KeePassXC (`keepassxc-yubikey-lock`) |
 | `playbooks/dakota/libfprint.yml` | libfprint no Dakota — build/install autocontidos, sem o submódulo |
 | `playbooks/files/`        | Arquivos estáticos copiados como estão via `copy` (unidades systemd, polkit action, environment.d, script wrapper do KeePassXC-Browser, distrobox.ini do libfprint no Dakota) — compartilhado pelos playbooks acima |
 | `playbooks/templates/`    | Arquivos `.j2` renderizados via `template` (regra udev do KeePassXC-YubiKey-lock, unidade do kanata, manifesto do KeePassXC-Browser). Módulo `template` só busca em `templates/`, não em `files/` — por isso ficam num diretório separado (`dakota-fprintd-override.conf.j2` é a exceção: referenciado por caminho absoluto em `playbooks/dakota/libfprint.yml`, já que aquele playbook não mora em `playbooks/`) |

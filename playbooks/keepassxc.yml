@@ -1,54 +1,46 @@
 ---
-# KeePassXC — trava todas as bases quando a YubiKey é removida da porta
-# USB (evento udev "remove"), via chamada D-Bus a
-# org.keepassxc.KeePassXC.MainWindow.lockAllDatabases. Portado de
-# lbssousa/nix-config (modules/system/security/keepassxc-yubikey-lock.nix)
-# — mesmo mecanismo (script chamado por regra udev via systemd-run),
-# adaptado para um único usuário (o que roda este Ansible), não a lista
-# de usuários configurável do módulo NixOS original.
+# KeePassXC — ponte de native messaging entre o Flatpak do KeePassXC e
+# os Flatpaks dos navegadores, para a extensão KeePassXC-Browser
+# funcionar. Cada Flatpak só enxerga o próprio diretório de dados
+# (~/.var/app/<id>/...) e não consegue spawnar diretamente um processo
+# de outro Flatpak — por isso o manifesto de native messaging e um
+# script wrapper são instalados DENTRO do diretório do navegador
+# (visível ao sandbox dele mesmo), e o wrapper usa flatpak-spawn --host
+# para rodar o keepassxc-proxy do Flatpak do KeePassXC no host.
 #
-# A instalação do KeePassXC fica FORA do escopo desta automação (mesmo
-# raciocínio do pam-u2f em playbooks/yubikey.yml): esta automação só
-# liga o gatilho (regra udev + script), assumindo que o KeePassXC já
-# está instalado e rodando com a integração D-Bus habilitada (ativa por
-# padrão em Ferramentas > Configurações > Geral).
-#
-# Desvio proposital do nix-config original: a regra udev casa
-# ENV{PRODUCT}=="1050/*" (qualquer produto do vendor Yubico), em vez do
-# produto específico "1050/407" hardcoded lá — cobre qualquer modelo de
-# YubiKey que o usuário conecte. Ver o cabeçalho de
-# playbooks/templates/keepassxc-yubikey-lock.rules.j2 para detalhes.
-#
-# Segundo bloco (tag keepassxc-browser): ponte de native messaging entre o
-# Flatpak do KeePassXC e os Flatpaks dos navegadores, para a extensão
-# KeePassXC-Browser funcionar. Cada Flatpak só enxerga o próprio
-# diretório de dados (~/.var/app/<id>/...) e não consegue spawnar
-# diretamente um processo de outro Flatpak — por isso o manifesto de
-# native messaging e um script wrapper são instalados DENTRO do
-# diretório do navegador (visível ao sandbox dele mesmo), e o wrapper usa
-# flatpak-spawn --host para rodar o keepassxc-proxy do Flatpak do
-# KeePassXC no host. As duas tags (keepassxc-yubikey-lock,
-# keepassxc-browser) são independentes; site.yml importa este arquivo com
-# a tag guarda-chuva `keepassxc`, que roda os dois.
-- name: KeePassXC — travar ao remover a YubiKey + ponte de native messaging
+# A trava do KeePassXC ao remover a YubiKey (tag keepassxc-yubikey-lock)
+# NÃO mora mais aqui — foi movida para playbooks/yubikey.yml e
+# playbooks/dakota/yubikey.yml, já que é disparada pela YubiKey (regra
+# udev), não por nada específico do KeePassXC; lá ela também falha
+# graciosamente (avisa e pula) se o KeePassXC não estiver instalado, em
+# vez do `ansible.builtin.fail` abaixo, que interromperia as plays
+# seguintes de site.yml/site-dakota.yml para o host.
+- name: KeePassXC — ponte de native messaging para o KeePassXC-Browser
   hosts: localhost
   connection: local
   gather_facts: true
 
   pre_tasks:
+    # tags: keepassxc-browser (não "always"): esta play só tem esse
+    # bloco desde que a trava ao remover a YubiKey mudou para
+    # playbooks/yubikey.yml — "always" faria este precheck (e o fail
+    # abaixo) rodar em QUALQUER `ansible-playbook site.yml --tags
+    # <outra-coisa>`, mesmo tags sem nenhuma relação com KeePassXC (ex.:
+    # `--tags neovim`), porque tasks "always" ignoram a tag pedida e só
+    # respeitam --skip-tags always.
     - name: Verificar se o KeePassXC está instalado (Flatpak)
       ansible.builtin.command: flatpak info org.keepassxc.KeePassXC
       register: keepassxc_flatpak_check
       changed_when: false
       failed_when: false
-      tags: always
+      tags: keepassxc-browser
 
     - name: Verificar se o KeePassXC está instalado (binário no PATH)
       ansible.builtin.command: which keepassxc
       register: keepassxc_bin_check
       changed_when: false
       failed_when: false
-      tags: always
+      tags: keepassxc-browser
 
     - name: Falhar com orientação se o KeePassXC não for encontrado
       ansible.builtin.fail:
@@ -59,7 +51,7 @@
           Configurações > Geral > "Habilitar integração com D-Bus"
           (ativa por padrão).
       when: keepassxc_flatpak_check.rc != 0 and keepassxc_bin_check.rc != 0
-      tags: always
+      tags: keepassxc-browser
 
     - name: Verificar quais navegadores Flatpak suportados estão instalados
       ansible.builtin.command: flatpak info {{ item.flatpak_id }}
@@ -72,35 +64,6 @@
       tags: keepassxc-browser
 
   tasks:
-    - name: KeePassXC — travar ao remover a YubiKey
-      become: true
-      tags: keepassxc-yubikey-lock
-      block:
-        - name: Garantir que o diretório de destino do script existe
-          ansible.builtin.file:
-            path: "{{ keepassxc_yubikey_lock_script_dest | dirname }}"
-            state: directory
-            mode: "0755"
-
-        - name: Instalar o script de travamento via D-Bus
-          ansible.builtin.copy:
-            src: keepassxc-yubikey-lock.sh
-            dest: "{{ keepassxc_yubikey_lock_script_dest }}"
-            owner: root
-            group: root
-            mode: "0755"
-
-        - name: Instalar a regra udev (dispara na remoção da YubiKey)
-          ansible.builtin.template:
-            src: keepassxc-yubikey-lock.rules.j2
-            dest: "{{ keepassxc_yubikey_lock_udev_rule_dest }}"
-            owner: root
-            group: root
-            mode: "0644"
-          notify:
-            - reload udev rules
-            - trigger udev
-
     # Um `block` não aceita `loop` diretamente em Ansible — por isso os
     # atributos loop/when/vars/tags abaixo são repetidos em cada task
     # individual, em vez de um block único.
@@ -179,14 +142,3 @@
       when: item.rc == 0
       changed_when: true
       tags: keepassxc-browser
-
-  handlers:
-    - name: reload udev rules
-      ansible.builtin.command: udevadm control --reload-rules
-      changed_when: false
-      listen: reload udev rules
-
-    - name: trigger udev
-      ansible.builtin.command: udevadm trigger
-      changed_when: false
-      listen: trigger udev

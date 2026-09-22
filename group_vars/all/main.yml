@@ -61,6 +61,14 @@ yubikey_authselect_base_features:
   - with-fingerprint
 yubikey_pcscd_dropin: /etc/systemd/system/pcscd.service.d/udevadm-settle.conf
 
+# Regra udev que reinicia o pcscd sempre que uma YubiKey é conectada —
+# cobre o bug conhecido do pcsc-lite em que o pcscd, já rodando, não
+# reconhece a reconexão da YubiKey (replug) nem a volta da suspensão,
+# deixando o cartão OpenPGP invisível para o GnuPG até um restart manual.
+# Complementa yubikey_pcscd_dropin acima (que só cobre a corrida com o
+# udev no boot). Veja playbooks/templates/yubikey-pcscd-restart.rules.j2.
+yubikey_pcscd_restart_udev_rule_dest: /etc/udev/rules.d/71-yubikey-pcscd-restart.rules
+
 # Kanata — remapeamento do Caps Lock a nível evdev (tap=Esc, hold=Ctrl,
 # Shift+tap=Caps Lock literal), via unidade systemd própria (não
 # community.general.homebrew_services — veja o cabeçalho de
@@ -71,9 +79,12 @@ kanata_systemd_unit: /etc/systemd/system/kanata.service
 
 # KeePassXC — trava todas as bases quando a YubiKey é removida (evento
 # udev), via D-Bus (org.keepassxc.KeePassXC.MainWindow.lockAllDatabases).
-# Requer o KeePassXC já instalado (fora do escopo desta automação — veja
-# playbooks/keepassxc.yml) com a integração D-Bus habilitada (ativa por
-# padrão).
+# Automação em playbooks/yubikey.yml e playbooks/dakota/yubikey.yml (tag
+# keepassxc-yubikey-lock), não em playbooks/keepassxc.yml — disparada
+# pela YubiKey, não por algo específico do KeePassXC. Requer o KeePassXC
+# já instalado (fora do escopo desta automação) com a integração D-Bus
+# habilitada (ativa por padrão); se não estiver, a tarefa avisa e pula
+# em vez de falhar.
 #
 # /var/usrlocal, não /usr/local: no Dakota (composefs-oci via bootc),
 # /usr/local NÃO é gravável — é um diretório real embutido na imagem
