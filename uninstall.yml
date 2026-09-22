@@ -49,6 +49,41 @@
         daemon_reload: true
       listen: reload systemd (kanata)
 
+- name: Proton Pass CLI — remover o serviço de injeção de chaves SSH
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  tasks:
+    - name: Parar e desabilitar o serviço de injeção de chaves SSH do Proton Pass
+      ansible.builtin.systemd:
+        name: "{{ proton_pass_ssh_agent_load_unit }}"
+        scope: user
+        state: stopped
+        enabled: false
+      failed_when: false
+      tags: [proton-pass]
+
+    - name: Remover a unidade systemd --user
+      ansible.builtin.file:
+        path: "{{ ansible_facts.env.HOME }}/.config/systemd/user/{{ proton_pass_ssh_agent_load_unit }}"
+        state: absent
+      notify: reload systemd --user (proton-pass)
+      tags: [proton-pass]
+
+    - name: Remover o script de injeção de chaves SSH
+      ansible.builtin.file:
+        path: "{{ proton_pass_ssh_agent_load_script_dest }}"
+        state: absent
+      tags: [proton-pass]
+
+  handlers:
+    - name: reload systemd --user (proton-pass)
+      ansible.builtin.systemd:
+        daemon_reload: true
+        scope: user
+      listen: reload systemd --user (proton-pass)
+
 - name: KeePassXC — remover a regra udev e o script de travamento
   hosts: localhost
   connection: local

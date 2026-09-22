@@ -40,6 +40,10 @@ bitwarden: _ensure-collections
 homebrew: _ensure-collections
     ansible-playbook site.yml --tags homebrew
 
+# No root needed (Homebrew formula + ~/.local/bin + ~/.config/systemd/user).
+proton-pass: _ensure-collections
+    ansible-playbook site.yml --tags proton-pass
+
 # No root needed (writes to ~/.config/zed only).
 zed: _ensure-collections
     ansible-playbook site.yml --tags zed
@@ -86,12 +90,21 @@ setup-dakota: _ensure-collections
 bitwarden-dakota: _ensure-collections
     {{ ap }} site-dakota.yml --tags bitwarden
 
-# No "homebrew-dakota" recipe: on Dakota, VSCode/Zed installation is
-# already handled by the image's own `ujust` recipes, so
-# playbooks/homebrew.yml isn't imported by site-dakota.yml.
+# No "homebrew-dakota" recipe: on Dakota, Zed installation is already
+# handled by the image's own `ujust` recipe, so playbooks/homebrew.yml
+# isn't imported by site-dakota.yml. VSCode is installed via snap
+# instead — see vscode-dakota below.
+
+# Needs root (snap install). Assumes snapd is already available on the host.
+vscode-dakota: _ensure-collections
+    {{ ap }} site-dakota.yml --tags vscode
 
 zed-dakota: _ensure-collections
     ansible-playbook site-dakota.yml --tags zed
+
+# No root needed (Homebrew formula + ~/.local/bin + ~/.config/systemd/user).
+proton-pass-dakota: _ensure-collections
+    ansible-playbook site-dakota.yml --tags proton-pass
 
 yubikey-dakota: _ensure-collections
     {{ ap }} site-dakota.yml --tags yubikey

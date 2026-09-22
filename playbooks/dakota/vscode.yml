@@ -1,0 +1,60 @@
+---
+# VSCode no Bluefin Dakota — instalado via snap (community.general.snap),
+# não via Homebrew cask (veja playbooks/homebrew.yml, usado só pelo
+# site.yml clássico). No Dakota, o Homebrew fica reservado ao Zed
+# (ainda gerenciado pelo `ujust` da própria imagem) — veja o cabeçalho
+# de site-dakota.yml para o porquê.
+#
+# Pressupõe que o snapd já está disponível e habilitado no host — esta
+# automação NÃO instala/configura o snapd (Dakota não traz snapd na
+# imagem por padrão; a forma de provisioná-lo em uma imagem bootc fica
+# fora do escopo daqui). Se o binário `snap` não for encontrado no
+# PATH, a automação avisa e pula em vez de falhar — mesmo raciocínio de
+# playbooks/keepassxc.yml e playbooks/dakota/yubikey.yml (um
+# ansible.builtin.fail aqui interromperia as plays seguintes de
+# site-dakota.yml para o host).
+- name: VSCode no Dakota — instalação via snap
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  pre_tasks:
+    - name: Verificar se o snap está disponível (binário no PATH)
+      ansible.builtin.command: which snap
+      register: dakota_vscode_snap_bin_check
+      changed_when: false
+      failed_when: false
+      tags: [vscode]
+
+    - name: Avisar que o snap não foi encontrado (instalação do VSCode pulada)
+      ansible.builtin.debug:
+        msg: >-
+          snap não encontrado no PATH — pulando a instalação do VSCode.
+          Instale e habilite o snapd primeiro e rode de novo com --tags
+          vscode para habilitá-la.
+      when: dakota_vscode_snap_bin_check.rc != 0
+      tags: [vscode]
+
+  tasks:
+    - name: Instalar o VSCode via snap (confinamento classic)
+      # O pacote oficial "code" só é publicado em confinamento classic
+      # (acesso irrestrito ao sistema de arquivos do host) — snap recusa
+      # instalar sem --classic.
+      #
+      # retries/until: o snap "code" é grande (~545MB, mais o "core20"
+      # como dependência) e o download via snap store falha com alguma
+      # frequência em conexões instáveis ("error: cannot perform the
+      # following tasks: - Download snap "code" (NNN) from channel
+      # "stable" (unexpected EOF)", verificado em teste real) — não é
+      # falha de lógica do módulo nem do playbook, e o `snap install`
+      # simplesmente reinicia o download do zero na tentativa seguinte.
+      community.general.snap:
+        name: "{{ dakota_vscode_snap_name }}"
+        classic: true
+      become: true
+      when: dakota_vscode_snap_bin_check.rc == 0
+      register: dakota_vscode_snap_install
+      until: dakota_vscode_snap_install is succeeded
+      retries: 3
+      delay: 15
+      tags: [vscode]

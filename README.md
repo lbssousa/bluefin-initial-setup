@@ -39,14 +39,39 @@ com `--skip-tags <tag>`.
      bitwarden-setup-polkit`/`bitwarden-remove-polkit` do
      [lbssousa/dotfiles](https://github.com/lbssousa/dotfiles) — que
      hoje chamam este Ansible em vez de um script próprio.
-2. **Homebrew tap `ublue-os` + VSCode/Zed** (`playbooks/homebrew.yml`, tag
+2. **Proton Pass CLI + agente SSH** (`playbooks/proton-pass.yml`, tag
+   `proton-pass`, **não roda por padrão** — tag `never`, só sob pedido
+   explícito: `--tags proton-pass` / `just proton-pass` / `just
+   proton-pass-dakota`) — instala o
+   [Proton Pass CLI](https://protonpass.github.io/pass-cli/) (`pass-cli`)
+   via Homebrew (fórmula oficial `proton-pass-cli`, sem tap:
+   [formulae.brew.sh/formula/proton-pass-cli](https://formulae.brew.sh/formula/proton-pass-cli))
+   e instala um serviço `systemd --user`
+   (`proton-pass-ssh-agent-load.service`, `WantedBy=default.target`) que,
+   na inicialização da sessão, injeta as chaves SSH do cofre do Proton
+   Pass no agente SSH **já ativo** da sessão via
+   [`pass-cli ssh-agent load`](https://protonpass.github.io/pass-cli/commands/ssh-agent/)
+   — que usa `SSH_AUTH_SOCK`, ao contrário de `ssh-agent start`, que
+   faria o `pass-cli` rodar como agente próprio e competir com o do
+   Bitwarden configurado no item 1 acima. O `ExecStart` do serviço é um
+   script gerado (`proton-pass-ssh-agent-load.sh.j2`) que espera (poll de
+   1s, até `proton_pass_ssh_agent_wait_seconds`, padrão 30s) o socket de
+   um agente SSH ativo aparecer antes de chamar `ssh-agent load` — cobre
+   o caso deste serviço iniciar antes do agente da sessão (ex.: o
+   Bitwarden só cria o socket quando o app abre); se o tempo esgotar,
+   avisa e sai sem erro. **Pré-requisito fora do escopo desta automação**
+   (interativo, como o login do Bitwarden/YubiKey): depois de instalado,
+   autentique uma vez com `pass-cli login` para o serviço conseguir
+   acessar o cofre — sem isso, `ssh-agent load` falha silenciosamente por
+   falta de credenciais no keychain do sistema.
+3. **Homebrew tap `ublue-os` + VSCode/Zed** (`playbooks/homebrew.yml`, tag
    `homebrew`) — adiciona e marca como confiável (`trust: true`) o tap
    [ublue-os/homebrew-tap](https://github.com/ublue-os/homebrew-tap),
    que publica casks de apps GUI empacotados especificamente para
    desktops imutáveis (sem depender do cask oficial, que assume macOS),
    e instala `visual-studio-code-linux` e `zed-linux` (casks desse tap)
    em vez de layering via rpm-ostree.
-3. **Zed — Podman como runtime de dev containers** (`playbooks/zed.yml`, tag
+4. **Zed — Podman como runtime de dev containers** (`playbooks/zed.yml`, tag
    `zed`) — configura `"use_podman": true` em `~/.config/zed/settings.json`
    ([zed.dev/docs/dev-containers](https://zed.dev/docs/dev-containers)),
    já que nas imagens uBlue/Bluefin só o Podman vem pré-instalado (sem
@@ -56,7 +81,7 @@ com `--skip-tags <tag>`.
    dotfiles/stow ou edição manual —, nunca é sobrescrito, já que tende a
    acumular preferências pessoais (tema, fonte, keybindings) ao longo do
    tempo.
-4. **YubiKey FIDO2/U2F** (`playbooks/yubikey.yml`, tag guarda-chuva `yubikey`) —
+5. **YubiKey FIDO2/U2F** (`playbooks/yubikey.yml`, tag guarda-chuva `yubikey`) —
    migrado das receitas `yubikey-*` do `just/.justfile` de
    [lbssousa/dotfiles](https://github.com/lbssousa/dotfiles) (fluxo
    atual, baseado em `authselect` gerenciado — não do script
@@ -116,7 +141,7 @@ com `--skip-tags <tag>`.
    também fica fora do escopo (mesmo raciocínio) — pressupõe-se o app
    já instalado, com a integração D-Bus habilitada (ativa por padrão em
    Ferramentas → Configurações → Geral).
-5. **Usuários adicionais** (`playbooks/users.yml`, tag `users`) — cria as contas listadas em
+6. **Usuários adicionais** (`playbooks/users.yml`, tag `users`) — cria as contas listadas em
    `group_vars/all/local_users.yml` (arquivo local, fora do git — veja a
    seção [Dados privados](#dados-privados-usuários-adicionais) abaixo).
    Nenhuma senha é definida: cada conta nova é marcada com
@@ -126,7 +151,7 @@ com `--skip-tags <tag>`.
    de senha no primeiro login em vez do prompt normal. A marcação só é
    aplicada na criação da conta — reexecutar o playbook não reseta a
    senha de um usuário que já a definiu.
-6. **Impressora EPSON L4160** (`playbooks/printer.yml`, tag `printer`) — cria a fila CUPS `L4160` em modo
+7. **Impressora EPSON L4160** (`playbooks/printer.yml`, tag `printer`) — cria a fila CUPS `L4160` em modo
    *driverless* (`lpadmin -m everywhere`, suporte nativo a IPP
    Everywhere), sem instalar o driver ESC/P-R da Epson: o filtro CUPS
    dele não tem como ser alcançado pelo `cupsd` fora de `/usr`
@@ -139,7 +164,7 @@ com `--skip-tags <tag>`.
    `printer_l4160_hostname` em `group_vars/all/main.yml` se a
    impressora for trocada/renomeada na rede. Pule com
    `--skip-tags printer` em máquinas sem essa impressora.
-7. **Neovim + LazyVim** (`playbooks/neovim.yml`, tag `neovim`) — instala o `neovim` via Homebrew e, se
+8. **Neovim + LazyVim** (`playbooks/neovim.yml`, tag `neovim`) — instala o `neovim` via Homebrew e, se
    `~/.config/nvim` ainda não existir, clona ali o
    [starter oficial do LazyVim](https://github.com/LazyVim/starter),
    removendo o histórico git do template (recomendação oficial do
@@ -147,7 +172,7 @@ com `--skip-tags <tag>`.
    plugins depois — veja `nvim/lua/plugins/*.lua` em
    [lbssousa/dotfiles](https://github.com/lbssousa/dotfiles)). Uma
    config já existente nunca é sobrescrita.
-8. **libfprint (goodix538d)** (submódulo `external/bluefin-distrobox-libfprint`, tag `libfprint`, **não roda por padrão** — tag `never`,
+9. **libfprint (goodix538d)** (submódulo `external/bluefin-distrobox-libfprint`, tag `libfprint`, **não roda por padrão** — tag `never`,
    só sob pedido explícito: `--tags libfprint` / `just libfprint` / `just libfprint-dakota`) — compila e instala o driver do leitor de
    digitais Goodix 27c6:538d, executando a automação do repositório
    separado [lbssousa/bluefin-distrobox-libfprint](https://github.com/lbssousa/bluefin-distrobox-libfprint)
@@ -156,7 +181,7 @@ com `--skip-tags <tag>`.
    o submódulo inicializado antes (`git submodule update --init
    --recursive`, ou simplesmente `just libfprint`, que faz isso
    sozinho).
-9. **Caps Lock via kanata** (`playbooks/capslock.yml`, tag `capslock`) — instala o
+10. **Caps Lock via kanata** (`playbooks/capslock.yml`, tag `capslock`) — instala o
    [kanata](https://github.com/jtroo/kanata) via Homebrew e remapeia o
    Caps Lock a nível evdev: toque rápido vira `Esc`, segurado vira
    `Ctrl`, e Shift+toque preserva o Caps Lock original. Por operar em
@@ -170,7 +195,7 @@ com `--skip-tags <tag>`.
    (`modules/system/core/localization.nix`). Mesmo raciocínio do Neovim
    e do Zed acima: `~/.config/kanata/kanata.kbd` só é copiado se ainda
    não existir, nunca sobrescrito.
-10. **KeePassXC — ponte de native messaging** (`playbooks/keepassxc.yml`, tag `keepassxc-browser`,
+11. **KeePassXC — ponte de native messaging** (`playbooks/keepassxc.yml`, tag `keepassxc-browser`,
     também coberta pela tag `keepassxc`) — ponte de *native messaging*
     entre o Flatpak do KeePassXC e os Flatpaks dos navegadores
     suportados (Firefox, Chrome, Brave, Chromium, Edge — lista em
@@ -190,9 +215,9 @@ com `--skip-tags <tag>`.
     A instalação do KeePassXC fica fora do escopo (mesmo raciocínio do
     `pam-u2f` no item YubiKey acima). Se não estiver instalado, esta
     automação avisa e pula em vez de falhar — mesmo comportamento da
-    trava ao remover a YubiKey (item 4 acima), que agora mora em
+    trava ao remover a YubiKey (item 5 acima), que agora mora em
     `playbooks/yubikey.yml`.
-11. **Bash com cara de Fish** (`playbooks/bash.yml`, tag guarda-chuva `bash`) — dois blocos
+12. **Bash com cara de Fish** (`playbooks/bash.yml`, tag guarda-chuva `bash`) — dois blocos
     independentes, cada um com sua própria sub-tag:
     - `bash-completion` — autocomplete case-insensitive
       (`completion-ignore-case`) e history-substring-search (setas
@@ -266,22 +291,32 @@ PAM). Ainda em alpha. Por isso existe `site-dakota.yml`, espelhando
   nenhum fstab/unit, então a automação usa esse caminho diretamente.
 
 Todos os outros playbooks (`zed`, `users`, `printer`, `neovim`,
-`capslock`, `keepassxc`, e o próprio `bitwarden`, que também não roda
-por padrão no Dakota) são os **mesmos arquivos** usados pelo `site.yml`
-clássico — Homebrew e Podman já vêm pré-instalados nas imagens Dakota,
-então nenhuma adaptação de conteúdo foi necessária.
+`capslock`, `keepassxc`, `proton-pass`, e o próprio `bitwarden`, que
+também não roda por padrão no Dakota) são os **mesmos arquivos** usados
+pelo `site.yml` clássico — Homebrew e Podman já vêm pré-instalados nas
+imagens Dakota, então nenhuma adaptação de conteúdo foi necessária.
 
-Assim como no `site.yml` clássico, `bitwarden` e `libfprint` têm tag
-`never` — nenhum dos dois roda com `just setup-dakota` sem pedido
-explícito.
+Assim como no `site.yml` clássico, `bitwarden`, `proton-pass` e
+`libfprint` têm tag `never` — nenhum dos três roda com `just
+setup-dakota` sem pedido explícito.
+
+- **VSCode** (`playbooks/dakota/vscode.yml`, tag `vscode`) — instala o
+  VSCode via `snap` (`community.general.snap`, confinamento `classic`,
+  pacote `code`), não via Homebrew/`ujust`. Pressupõe que o snapd já
+  está disponível e habilitado no host — Dakota não traz snapd na
+  imagem por padrão, e provisioná-lo ali fica fora do escopo desta
+  automação. Se o binário `snap` não for encontrado no PATH, a
+  automação avisa e pula em vez de falhar.
 
 `site-dakota.yml` **não importa** `playbooks/homebrew.yml` (tag
 `homebrew`, sem receita `homebrew-dakota` correspondente): no Dakota, a
-instalação do VSCode e do Zed já é gerenciada pelo `ujust` da própria
-imagem, então esse playbook (tap `ublue-os` + casks do VSCode/Zed) seria
-redundante ali. `playbooks/zed.yml` continua rodando normalmente — ele
-só configura o Podman como runtime de dev containers do Zed
-(`~/.config/zed/settings.json`), não instala o app.
+instalação do Zed já é gerenciada pelo `ujust` da própria imagem, então
+esse playbook (tap `ublue-os` + casks do VSCode/Zed) seria redundante
+ali. `playbooks/zed.yml` continua rodando normalmente — ele só
+configura o Podman como runtime de dev containers do Zed
+(`~/.config/zed/settings.json`), não instala o app. O VSCode, por sua
+vez, deixou de depender do `ujust`/Homebrew — é instalado pela
+automação `playbooks/dakota/vscode.yml` descrita acima.
 
 ```bash
 just setup-dakota                    # tudo, exceto Bitwarden e libfprint — como o `just setup` clássico
@@ -310,15 +345,16 @@ Cobre a remoção da polkit action do Bitwarden (equivalente ao antigo
 `bitwarden/uninstall.sh` do
 [lbssousa/dotfiles](https://github.com/lbssousa/dotfiles), que agora
 invoca este playbook em vez de um script próprio), do serviço/unidade
-systemd do kanata (tag `capslock`), da regra udev/script do
-KeePassXC (tag `keepassxc-yubikey-lock`), da ponte de native messaging
-do KeePassXC com os navegadores Flatpak (tag `keepassxc-browser` —
-remove o manifesto, o wrapper e a permissão `talk-name` concedida a
-cada navegador) e, no Dakota, do install em `/var/usrlocal` +
-`fprintd.service` do libfprint (tag `libfprint-dakota`) — em todos os
-casos, sem remover a config pessoal (`kanata.kbd`) nem desinstalar
-pacotes via Homebrew. Mais automações de desinstalação devem ser
-adicionadas aqui com o tempo.
+systemd do kanata (tag `capslock`), do serviço `systemd --user` +
+script de injeção de chaves SSH do Proton Pass (tag `proton-pass`), da
+regra udev/script do KeePassXC (tag `keepassxc-yubikey-lock`), da ponte
+de native messaging do KeePassXC com os navegadores Flatpak (tag
+`keepassxc-browser` — remove o manifesto, o wrapper e a permissão
+`talk-name` concedida a cada navegador) e, no Dakota, do install em
+`/var/usrlocal` + `fprintd.service` do libfprint (tag
+`libfprint-dakota`) — em todos os casos, sem remover a config pessoal
+(`kanata.kbd`) nem desinstalar pacotes via Homebrew. Mais automações de
+desinstalação devem ser adicionadas aqui com o tempo.
 
 ## Dados privados (usuários adicionais)
 
@@ -439,6 +475,7 @@ ainda não estiver no estado desejado.
 | `run-empowered.sh`       | Roda o `ansible-playbook` sob `run0 --empower`: uma autenticação polkit, depois as tarefas privilegiadas passam (veja "Privilégio" acima) |
 | `playbooks/bitwarden.yml` | Bitwarden — Flatpak + agente SSH + polkit (tag `bitwarden`, não roda por padrão) |
 | `playbooks/homebrew.yml`  | Tap `ublue-os` + VSCode/Zed (tag `homebrew`)                    |
+| `playbooks/proton-pass.yml` | Proton Pass CLI + serviço `systemd --user` que injeta as chaves SSH do cofre no agente ativo (tag `proton-pass`, não roda por padrão) |
 | `playbooks/zed.yml`       | Podman como runtime de dev containers no Zed (tag `zed`)         |
 | `playbooks/yubikey.yml`   | YubiKey FIDO2/U2F, Fedora/authselect — etapas selecionáveis (tags `yubikey-*`) + trava do KeePassXC ao remover a YubiKey (tag `keepassxc-yubikey-lock`, falha graciosamente se o KeePassXC não estiver instalado) |
 | `playbooks/users.yml`     | Usuários adicionais (tag `users`)                                |
@@ -449,9 +486,10 @@ ainda não estiver no estado desejado.
 | `playbooks/bash.yml`      | Bash com cara de Fish — completion case-insensitive + history-substring-search + ble.sh (tags `bash-completion`/`blesh`) |
 | `playbooks/dakota/yubikey.yml`   | YubiKey no Dakota — `yubikey-setup-pcscd` + `yubikey-gpg-import`, sem PAM; + trava do KeePassXC (`keepassxc-yubikey-lock`) |
 | `playbooks/dakota/libfprint.yml` | libfprint no Dakota — build/install autocontidos, sem o submódulo |
+| `playbooks/dakota/vscode.yml`    | VSCode no Dakota — instalação via snap (tag `vscode`), falha graciosamente se o snapd não estiver disponível |
 | `playbooks/files/`        | Arquivos estáticos copiados como estão via `copy` (unidades systemd, polkit action, environment.d, script wrapper do KeePassXC-Browser, distrobox.ini do libfprint no Dakota) — compartilhado pelos playbooks acima |
-| `playbooks/templates/`    | Arquivos `.j2` renderizados via `template` (regra udev do KeePassXC-YubiKey-lock, unidade do kanata, manifesto do KeePassXC-Browser). Módulo `template` só busca em `templates/`, não em `files/` — por isso ficam num diretório separado (`dakota-fprintd-override.conf.j2` é a exceção: referenciado por caminho absoluto em `playbooks/dakota/libfprint.yml`, já que aquele playbook não mora em `playbooks/`) |
-| `group_vars/all/main.yml` | Variáveis públicas de todas as automações (IDs de Flatpak, nome do tap, casks, caminhos, alvos do KeePassXC-Browser, vars do libfprint no Dakota) |
+| `playbooks/templates/`    | Arquivos `.j2` renderizados via `template` (regra udev do KeePassXC-YubiKey-lock, unidade do kanata, manifesto do KeePassXC-Browser, script + unidade `systemd --user` do agente SSH do Proton Pass). Módulo `template` só busca em `templates/`, não em `files/` — por isso ficam num diretório separado (`dakota-fprintd-override.conf.j2` é a exceção: referenciado por caminho absoluto em `playbooks/dakota/libfprint.yml`, já que aquele playbook não mora em `playbooks/`) |
+| `group_vars/all/main.yml` | Variáveis públicas de todas as automações (IDs de Flatpak, nome do tap, casks, caminhos, alvos do KeePassXC-Browser, vars do libfprint, do VSCode via snap no Dakota e do Proton Pass CLI) |
 | `group_vars/all/local_users.yml.example` | Template dos usuários adicionais (copie para `local_users.yml`) |
 | `group_vars/all/local_users.yml` | Dados reais dos usuários adicionais — local, fora do git    |
 | `requirements.yml`       | Collections Ansible necessárias (`community.general`)           |

@@ -34,6 +34,37 @@ ublue_homebrew_casks:
   - "{{ ublue_homebrew_tap }}/visual-studio-code-linux"
   - "{{ ublue_homebrew_tap }}/zed-linux"
 
+# VSCode no Bluefin Dakota — instalado via snap (playbooks/dakota/vscode.yml),
+# não via Homebrew cask (a lista ublue_homebrew_casks acima é usada só
+# pelo site.yml clássico). Pressupõe snapd já disponível no host — veja
+# o cabeçalho de playbooks/dakota/vscode.yml.
+dakota_vscode_snap_name: code
+
+# Proton Pass CLI — instalado via Homebrew (fórmula oficial
+# "proton-pass-cli", sem tap: formulae.brew.sh/formula/proton-pass-cli;
+# binário `pass-cli`). playbooks/proton-pass.yml (tag "never", como o
+# Bitwarden acima — escolha específica de gerenciador de senhas, não
+# roda por padrão).
+proton_pass_cli_formula: proton-pass-cli
+
+# Serviço systemd --user que injeta, na inicialização da sessão, as
+# chaves SSH do cofre do Proton Pass no agente SSH JÁ ATIVO da sessão
+# (`pass-cli ssh-agent load` — usa SSH_AUTH_SOCK, ao contrário de
+# `ssh-agent start`, que faria o pass-cli rodar como agente próprio e
+# competiria com o do Bitwarden configurado em playbooks/bitwarden.yml).
+# Pré-requisito fora do escopo desta automação: autentique uma vez com
+# `pass-cli login` depois de instalado (interativo, como o login do
+# Bitwarden/YubiKey) — sem isso o `ssh-agent load` falha silenciosamente
+# por falta de credenciais no keychain do sistema.
+proton_pass_ssh_agent_load_script_dest: "{{ ansible_facts.env.HOME }}/.local/bin/proton-pass-ssh-agent-load.sh"
+proton_pass_ssh_agent_load_unit: proton-pass-ssh-agent-load.service
+
+# Quantos segundos o script acima espera (poll de 1s) o socket de um
+# agente SSH ativo aparecer antes de desistir e sair sem erro — cobre o
+# caso deste serviço iniciar antes do agente da sessão (ex.: o Bitwarden
+# só cria o socket quando o app abre).
+proton_pass_ssh_agent_wait_seconds: 30
+
 # Impressora EPSON L4160 — fila CUPS driverless (IPP Everywhere), sem
 # instalar o driver ESC/P-R da Epson. printer_l4160_hostname é o mesmo
 # hostname mDNS usado em lbssousa/nix-config
