@@ -21,7 +21,25 @@
 # `pass-cli login` para o serviço conseguir acessar o cofre — sem isso,
 # `pass-cli ssh-agent load` falha silenciosamente por falta de
 # credenciais no keychain do sistema (mesmo aviso da documentação
-# oficial para o modo daemon).
+# oficial para o modo daemon). Faça esse login numa sessão NOVA (logout
+# ou reboot) depois de rodar esta automação, para que
+# ~/.config/environment.d/25-proton-pass-keyring.conf (instalado
+# abaixo) já esteja em vigor — a chave de sessão criada pelo login
+# nasce no backend indicado por PROTON_PASS_LINUX_KEYRING, e precisa
+# ser o mesmo backend que o serviço vai usar depois.
+#
+# Persistência após reboot: por padrão, o pass-cli guarda a chave de
+# criptografia da sessão no kernel keyring do Linux, que é ZERADO A
+# CADA REBOOT (protonpass.github.io/pass-cli/get-started/configuration/)
+# — forçaria `pass-cli login` de novo a cada boot. Por isso esta
+# automação fixa PROTON_PASS_LINUX_KEYRING=dbus (variável
+# proton_pass_linux_keyring em group_vars/all/main.yml), que troca para
+# o Secret Service via D-Bus (GNOME Keyring), persistido em disco.
+# Único requisito: o GNOME Keyring precisa estar desbloqueado no login
+# — já é o padrão via PAM no GDM do Bluefin, junto com a senha da
+# conta. Se o Secret Service estiver inacessível/travado, o pass-cli
+# falha explicitamente em vez de cair pro kernel keyring em silêncio
+# (mesma documentação acima).
 #
 # playbooks/templates/proton-pass-ssh-agent-load.sh.j2: o script
 # instalado como ExecStart do serviço espera (poll, até
@@ -71,6 +89,18 @@
             mode: "0755"
           notify: restart proton-pass-ssh-agent-load
 
+        - name: Garantir que ~/.config/environment.d existe
+          ansible.builtin.file:
+            path: "{{ ansible_facts.env.HOME }}/.config/environment.d"
+            state: directory
+            mode: "0755"
+
+        - name: Fixar o backend de keyring do pass-cli (D-Bus/Secret Service, sobrevive a reboot)
+          ansible.builtin.template:
+            src: 25-proton-pass-keyring.conf.j2
+            dest: "{{ ansible_facts.env.HOME }}/.config/environment.d/25-proton-pass-keyring.conf"
+            mode: "0644"
+
         - name: Garantir que ~/.config/systemd/user existe
           ansible.builtin.file:
             path: "{{ ansible_facts.env.HOME }}/.config/systemd/user"
@@ -82,7 +112,9 @@
             src: proton-pass-ssh-agent-load.service.j2
             dest: "{{ ansible_facts.env.HOME }}/.config/systemd/user/{{ proton_pass_ssh_agent_load_unit }}"
             mode: "0644"
-          notify: reload systemd --user (proton-pass)
+          notify:
+            - reload systemd --user (proton-pass)
+            - restart proton-pass-ssh-agent-load
 
         - name: Habilitar o serviço de injeção de chaves SSH do Proton Pass
           ansible.builtin.systemd:
@@ -91,6 +123,30 @@
             daemon_reload: true
             enabled: true
             state: started
+          register: proton_pass_service_start
+          failed_when: false
+
+        # Não falha a play (mesmo raciocínio "avisar e pular" do
+        # cabeçalho acima): o serviço já fica habilitado (inicia sozinho
+        # no próximo login válido) mesmo que ainda não consiga rodar —
+        # falta de `pass-cli login` ou, na primeira vez que esta
+        # automação troca o backend de keyring numa máquina que já
+        # tinha uma sessão no kernel keyring antigo, um force-logout
+        # automático do próprio pass-cli (ele mesmo já limpa a sessão
+        # inválida — "Local encryption key not found but local data
+        # exists. Forcing logout for security."). Em ambos os casos a
+        # correção é a mesma: `pass-cli login` de novo.
+        - name: Avisar se o serviço não conseguiu iniciar (provável falta de `pass-cli login`)
+          ansible.builtin.debug:
+            msg: >-
+              O serviço {{ proton_pass_ssh_agent_load_unit }} não
+              conseguiu iniciar — provavelmente falta autenticar com
+              `pass-cli login` (ou uma sessão antiga no kernel keyring
+              acabou de ser invalidada pela troca para o backend D-Bus).
+              Rode `pass-cli login` agora — PROTON_PASS_LINUX_KEYRING=dbus
+              já está em vigor nesta sessão — e depois
+              `systemctl --user restart {{ proton_pass_ssh_agent_load_unit }}`.
+          when: proton_pass_service_start is failed
 
   handlers:
     - name: reload systemd --user (proton-pass)

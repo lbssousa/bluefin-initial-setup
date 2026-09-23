@@ -77,6 +77,12 @@
         state: absent
       tags: [proton-pass]
 
+    - name: Remover a variável de ambiente do backend de keyring do pass-cli
+      ansible.builtin.file:
+        path: "{{ ansible_facts.env.HOME }}/.config/environment.d/25-proton-pass-keyring.conf"
+        state: absent
+      tags: [proton-pass]
+
   handlers:
     - name: reload systemd --user (proton-pass)
       ansible.builtin.systemd:
