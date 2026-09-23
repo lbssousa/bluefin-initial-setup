@@ -65,6 +65,20 @@ proton_pass_ssh_agent_load_unit: proton-pass-ssh-agent-load.service
 # só cria o socket quando o app abre).
 proton_pass_ssh_agent_wait_seconds: 30
 
+# Backend de keyring que o pass-cli usa no Linux para guardar a chave de
+# criptografia da sessão criada por `pass-cli login`
+# (protonpass.github.io/pass-cli/get-started/configuration/):
+# "kernel" (padrão do pass-cli) usa o kernel keyring, que mora só em
+# memória e É ZERADO A CADA REBOOT — forçaria `pass-cli login` de novo
+# a cada boot antes do serviço de injeção de chaves SSH funcionar.
+# "dbus" usa o Secret Service via D-Bus (GNOME Keyring), persistido em
+# disco, que sobrevive a reboot — desde que o GNOME Keyring seja
+# desbloqueado no login (padrão via PAM no GDM do Bluefin, junto com a
+# senha da conta). Único requisito: `pass-cli login` precisa ser
+# executado com esta mesma variável já no ambiente (ver comentário em
+# playbooks/proton-pass.yml) para a chave já nascer no backend certo.
+proton_pass_linux_keyring: dbus
+
 # Impressora EPSON L4160 — fila CUPS driverless (IPP Everywhere), sem
 # instalar o driver ESC/P-R da Epson. printer_l4160_hostname é o mesmo
 # hostname mDNS usado em lbssousa/nix-config

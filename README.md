@@ -59,11 +59,22 @@ com `--skip-tags <tag>`.
    um agente SSH ativo aparecer antes de chamar `ssh-agent load` — cobre
    o caso deste serviço iniciar antes do agente da sessão (ex.: o
    Bitwarden só cria o socket quando o app abre); se o tempo esgotar,
-   avisa e sai sem erro. **Pré-requisito fora do escopo desta automação**
-   (interativo, como o login do Bitwarden/YubiKey): depois de instalado,
-   autentique uma vez com `pass-cli login` para o serviço conseguir
-   acessar o cofre — sem isso, `ssh-agent load` falha silenciosamente por
-   falta de credenciais no keychain do sistema.
+   avisa e sai sem erro. **Persistência após reboot**: por padrão o
+   `pass-cli` guarda a chave de criptografia da sessão no kernel keyring
+   do Linux, que é zerado a cada boot
+   ([docs](https://protonpass.github.io/pass-cli/get-started/configuration/))
+   — por isso esta automação fixa `PROTON_PASS_LINUX_KEYRING=dbus`
+   (`~/.config/environment.d/25-proton-pass-keyring.conf`, variável
+   `proton_pass_linux_keyring`), que troca para o Secret Service via
+   D-Bus (GNOME Keyring, desbloqueado no login via PAM no GDM do
+   Bluefin) e sobrevive a reboot. **Pré-requisito fora do escopo desta
+   automação** (interativo, como o login do Bitwarden/YubiKey): depois
+   de instalado, autentique uma vez com `pass-cli login` **numa sessão
+   nova** (logout ou reboot, para o `environment.d` acima já estar em
+   vigor) para o serviço conseguir acessar o cofre — sem isso, ou se o
+   login for feito antes da variável de ambiente valer, `ssh-agent load`
+   falha silenciosamente (ou a chave fica presa no kernel keyring de
+   antes) por falta de credenciais no keychain do sistema.
 3. **Homebrew tap `ublue-os` + VSCode/Zed** (`playbooks/homebrew.yml`, tag
    `homebrew`) — adiciona e marca como confiável (`trust: true`) o tap
    [ublue-os/homebrew-tap](https://github.com/ublue-os/homebrew-tap),
