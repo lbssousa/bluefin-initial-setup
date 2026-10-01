@@ -53,38 +53,38 @@
 
         - name: Verificar se já existe configuração do Neovim
           ansible.builtin.stat:
-            path: "{{ ansible_facts.env.HOME }}/.config/nvim"
+            path: "{{ lookup('env', 'HOME') }}/.config/nvim"
           register: nvim_config_dir
 
         - name: Clonar o starter do LazyVim (configuração inicial)
           ansible.builtin.git:
             repo: "{{ lazyvim_starter_repo }}"
-            dest: "{{ ansible_facts.env.HOME }}/.config/nvim"
+            dest: "{{ lookup('env', 'HOME') }}/.config/nvim"
             depth: 1
           when: not nvim_config_dir.stat.exists
 
         - name: Remover o histórico git do starter do LazyVim
           ansible.builtin.file:
-            path: "{{ ansible_facts.env.HOME }}/.config/nvim/.git"
+            path: "{{ lookup('env', 'HOME') }}/.config/nvim/.git"
             state: absent
           when: not nvim_config_dir.stat.exists
 
         - name: Garantir que lua/plugins existe
           ansible.builtin.file:
-            path: "{{ ansible_facts.env.HOME }}/.config/nvim/lua/plugins"
+            path: "{{ lookup('env', 'HOME') }}/.config/nvim/lua/plugins"
             state: directory
             mode: "0755"
 
         - name: Habilitar o extra (preset) do LazyVim para LaTeX
           ansible.builtin.copy:
             src: nvim-extras.lua
-            dest: "{{ ansible_facts.env.HOME }}/.config/nvim/lua/plugins/extras.lua"
+            dest: "{{ lookup('env', 'HOME') }}/.config/nvim/lua/plugins/extras.lua"
             mode: "0644"
             force: false
 
         - name: Instalar o plugin gregorio.nvim (notação litúrgica GABC/NABC)
           ansible.builtin.copy:
             src: nvim-gregorio.lua
-            dest: "{{ ansible_facts.env.HOME }}/.config/nvim/lua/plugins/gregorio.lua"
+            dest: "{{ lookup('env', 'HOME') }}/.config/nvim/lua/plugins/gregorio.lua"
             mode: "0644"
             force: false

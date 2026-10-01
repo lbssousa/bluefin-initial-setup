@@ -82,7 +82,7 @@
       block:
         - name: Verificar se já existe arquivo de chaves U2F
           ansible.builtin.stat:
-            path: "{{ ansible_facts.env.HOME }}/.config/Yubico/u2f_keys"
+            path: "{{ lookup('env', 'HOME') }}/.config/Yubico/u2f_keys"
           register: yubikey_keys_stat
 
         - name: Pedir para inserir a YubiKey
@@ -92,20 +92,20 @@
 
         - name: Garantir que ~/.config/Yubico existe
           ansible.builtin.file:
-            path: "{{ ansible_facts.env.HOME }}/.config/Yubico"
+            path: "{{ lookup('env', 'HOME') }}/.config/Yubico"
             state: directory
             mode: "0755"
           when: not yubikey_keys_stat.stat.exists
 
         - name: Registrar a YubiKey (toque a chave quando o LED piscar)
-          ansible.builtin.shell: "umask 077; pamu2fcfg > {{ ansible_facts.env.HOME }}/.config/Yubico/u2f_keys"
+          ansible.builtin.shell: "umask 077; pamu2fcfg > {{ lookup('env', 'HOME') }}/.config/Yubico/u2f_keys"
           when: not yubikey_keys_stat.stat.exists
           changed_when: true
 
         - name: Gravar o origin do enrollment (hostname atual)
           ansible.builtin.copy:
             content: "pam://{{ ansible_facts.hostname }}\n"
-            dest: "{{ ansible_facts.env.HOME }}/.config/Yubico/u2f_origin"
+            dest: "{{ lookup('env', 'HOME') }}/.config/Yubico/u2f_origin"
             mode: "0644"
           when: not yubikey_keys_stat.stat.exists
 

@@ -56,7 +56,7 @@ proton_pass_cli_formula: proton-pass-cli
 # `pass-cli login` depois de instalado (interativo, como o login do
 # Bitwarden/YubiKey) — sem isso o `ssh-agent load` falha silenciosamente
 # por falta de credenciais no keychain do sistema.
-proton_pass_ssh_agent_load_script_dest: "{{ ansible_facts.env.HOME }}/.local/bin/proton-pass-ssh-agent-load.sh"
+proton_pass_ssh_agent_load_script_dest: "{{ lookup('env', 'HOME') }}/.local/bin/proton-pass-ssh-agent-load.sh"
 proton_pass_ssh_agent_load_unit: proton-pass-ssh-agent-load.service
 
 # Quantos segundos o script acima espera (poll de 1s) o socket de um
@@ -119,7 +119,7 @@ yubikey_pcscd_restart_udev_rule_dest: /etc/udev/rules.d/71-yubikey-pcscd-restart
 # community.general.homebrew_services — veja o cabeçalho de
 # playbooks/capslock.yml para o motivo). kanata_config_dest é a config
 # pessoal do usuário atual e nunca é sobrescrita se já existir.
-kanata_config_dest: "{{ ansible_facts.env.HOME }}/.config/kanata/kanata.kbd"
+kanata_config_dest: "{{ lookup('env', 'HOME') }}/.config/kanata/kanata.kbd"
 kanata_systemd_unit: /etc/systemd/system/kanata.service
 
 # KeePassXC — trava todas as bases quando a YubiKey é removida (evento
@@ -189,8 +189,8 @@ dakota_libfprint_distrobox_ini_file: "{{ inventory_dir }}/playbooks/files/dakota
 dakota_libfprint_opencv_formula: opencv@4
 dakota_libfprint_repo: https://github.com/lbssousa/libfprint.git
 dakota_libfprint_ref: goodix-538d-sigfm-gtls
-dakota_libfprint_checkout_dir: "{{ ansible_facts.env.HOME }}/src/libfprint-goodix538d"
-dakota_libfprint_stage_dir: "{{ ansible_facts.env.HOME }}/src/libfprint-goodix538d-stage"
+dakota_libfprint_checkout_dir: "{{ lookup('env', 'HOME') }}/src/libfprint-goodix538d"
+dakota_libfprint_stage_dir: "{{ lookup('env', 'HOME') }}/src/libfprint-goodix538d-stage"
 dakota_libfprint_usrlocal_prefix: /var/usrlocal
 dakota_libfprint_usrlocal_libdir: "{{ dakota_libfprint_usrlocal_prefix }}/lib64"
 
@@ -205,6 +205,6 @@ blesh_repo: https://github.com/akinomyoga/ble.sh.git
 blesh_build_deps:
   - make
   - gawk
-blesh_src_dir: "{{ ansible_facts.env.HOME }}/.local/share/ble.sh-src"
-blesh_install_prefix: "{{ ansible_facts.env.HOME }}/.local"
-blesh_entry: "{{ ansible_facts.env.HOME }}/.local/share/blesh/ble.sh"
+blesh_src_dir: "{{ lookup('env', 'HOME') }}/.local/share/ble.sh-src"
+blesh_install_prefix: "{{ lookup('env', 'HOME') }}/.local"
+blesh_entry: "{{ lookup('env', 'HOME') }}/.local/share/blesh/ble.sh"

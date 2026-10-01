@@ -86,7 +86,7 @@
         (keepassxc_flatpak_check.rc == 0 or keepassxc_bin_check.rc == 0)
       vars:
         keepassxc_proxy_host_dest: >-
-          {{ ansible_facts.env.HOME }}/.var/app/{{ item.item.flatpak_id }}/data/keepassxc-proxy-host
+          {{ lookup('env', 'HOME') }}/.var/app/{{ item.item.flatpak_id }}/data/keepassxc-proxy-host
       tags: keepassxc-browser
 
     - name: Instalar o wrapper flatpak-spawn (keepassxc-proxy-host)
@@ -102,7 +102,7 @@
         (keepassxc_flatpak_check.rc == 0 or keepassxc_bin_check.rc == 0)
       vars:
         keepassxc_proxy_host_dest: >-
-          {{ ansible_facts.env.HOME }}/.var/app/{{ item.item.flatpak_id }}/data/keepassxc-proxy-host
+          {{ lookup('env', 'HOME') }}/.var/app/{{ item.item.flatpak_id }}/data/keepassxc-proxy-host
       tags: keepassxc-browser
 
     - name: Garantir que o diretório de native messaging hosts do navegador existe
@@ -118,7 +118,7 @@
         (keepassxc_flatpak_check.rc == 0 or keepassxc_bin_check.rc == 0)
       vars:
         keepassxc_native_messaging_dir: >-
-          {{ ansible_facts.env.HOME }}/.var/app/{{ item.item.flatpak_id }}/{{
+          {{ lookup('env', 'HOME') }}/.var/app/{{ item.item.flatpak_id }}/{{
           '.mozilla/native-messaging-hosts' if item.item.kind == 'firefox'
           else 'config/' + item.item.vendor_dir + '/NativeMessagingHosts' }}
       tags: keepassxc-browser
@@ -136,9 +136,9 @@
         (keepassxc_flatpak_check.rc == 0 or keepassxc_bin_check.rc == 0)
       vars:
         keepassxc_proxy_host_dest: >-
-          {{ ansible_facts.env.HOME }}/.var/app/{{ item.item.flatpak_id }}/data/keepassxc-proxy-host
+          {{ lookup('env', 'HOME') }}/.var/app/{{ item.item.flatpak_id }}/data/keepassxc-proxy-host
         keepassxc_native_messaging_dir: >-
-          {{ ansible_facts.env.HOME }}/.var/app/{{ item.item.flatpak_id }}/{{
+          {{ lookup('env', 'HOME') }}/.var/app/{{ item.item.flatpak_id }}/{{
           '.mozilla/native-messaging-hosts' if item.item.kind == 'firefox'
           else 'config/' + item.item.vendor_dir + '/NativeMessagingHosts' }}
         # Nome de var limpo pro template — dentro do .j2, "item" seria o

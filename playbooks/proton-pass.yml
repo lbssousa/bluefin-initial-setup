@@ -91,26 +91,26 @@
 
         - name: Garantir que ~/.config/environment.d existe
           ansible.builtin.file:
-            path: "{{ ansible_facts.env.HOME }}/.config/environment.d"
+            path: "{{ lookup('env', 'HOME') }}/.config/environment.d"
             state: directory
             mode: "0755"
 
         - name: Fixar o backend de keyring do pass-cli (D-Bus/Secret Service, sobrevive a reboot)
           ansible.builtin.template:
             src: 25-proton-pass-keyring.conf.j2
-            dest: "{{ ansible_facts.env.HOME }}/.config/environment.d/25-proton-pass-keyring.conf"
+            dest: "{{ lookup('env', 'HOME') }}/.config/environment.d/25-proton-pass-keyring.conf"
             mode: "0644"
 
         - name: Garantir que ~/.config/systemd/user existe
           ansible.builtin.file:
-            path: "{{ ansible_facts.env.HOME }}/.config/systemd/user"
+            path: "{{ lookup('env', 'HOME') }}/.config/systemd/user"
             state: directory
             mode: "0755"
 
         - name: Instalar o serviço systemd --user que injeta as chaves na inicialização da sessão
           ansible.builtin.template:
             src: proton-pass-ssh-agent-load.service.j2
-            dest: "{{ ansible_facts.env.HOME }}/.config/systemd/user/{{ proton_pass_ssh_agent_load_unit }}"
+            dest: "{{ lookup('env', 'HOME') }}/.config/systemd/user/{{ proton_pass_ssh_agent_load_unit }}"
             mode: "0644"
           notify:
             - reload systemd --user (proton-pass)

@@ -39,7 +39,7 @@
       block:
         - name: Verificar se ~/.inputrc já existe
           ansible.builtin.stat:
-            path: "{{ ansible_facts.env.HOME }}/.inputrc"
+            path: "{{ lookup('env', 'HOME') }}/.inputrc"
           register: inputrc_stat
 
         - name: Herdar os defaults de /etc/inputrc (só ao criar um ~/.inputrc novo)
@@ -47,7 +47,7 @@
           # /etc/inputrc (que só é lido quando ~/.inputrc NÃO existe, ou
           # quando o próprio ~/.inputrc pede pra incluí-lo).
           ansible.builtin.lineinfile:
-            path: "{{ ansible_facts.env.HOME }}/.inputrc"
+            path: "{{ lookup('env', 'HOME') }}/.inputrc"
             create: true
             mode: "0644"
             line: "$include /etc/inputrc"
@@ -56,7 +56,7 @@
 
         - name: Habilitar autocomplete case-insensitive
           ansible.builtin.lineinfile:
-            path: "{{ ansible_facts.env.HOME }}/.inputrc"
+            path: "{{ lookup('env', 'HOME') }}/.inputrc"
             create: true
             mode: "0644"
             regexp: '^set\s+completion-ignore-case\b'
@@ -64,7 +64,7 @@
 
         - name: Habilitar history-substring-search (seta para cima)
           ansible.builtin.lineinfile:
-            path: "{{ ansible_facts.env.HOME }}/.inputrc"
+            path: "{{ lookup('env', 'HOME') }}/.inputrc"
             create: true
             mode: "0644"
             regexp: '^"\\e\[A":'
@@ -72,7 +72,7 @@
 
         - name: Habilitar history-substring-search (seta para baixo)
           ansible.builtin.lineinfile:
-            path: "{{ ansible_facts.env.HOME }}/.inputrc"
+            path: "{{ lookup('env', 'HOME') }}/.inputrc"
             create: true
             mode: "0644"
             regexp: '^"\\e\[B":'
@@ -112,7 +112,7 @@
           # abaixo), pra ele capturar keybindings definidos depois no
           # arquivo (fzf etc.) em vez de ter as suas próprias sobrescritas.
           ansible.builtin.blockinfile:
-            path: "{{ ansible_facts.env.HOME }}/.bashrc"
+            path: "{{ lookup('env', 'HOME') }}/.bashrc"
             create: true
             mode: "0644"
             marker: "# {mark} ANSIBLE MANAGED BLOCK (ble.sh source)"
@@ -126,7 +126,7 @@
 
         - name: Anexar o ble.sh no fim do ~/.bashrc (ble-attach)
           ansible.builtin.blockinfile:
-            path: "{{ ansible_facts.env.HOME }}/.bashrc"
+            path: "{{ lookup('env', 'HOME') }}/.bashrc"
             create: true
             mode: "0644"
             marker: "# {mark} ANSIBLE MANAGED BLOCK (ble.sh attach)"

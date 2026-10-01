@@ -66,7 +66,7 @@
 
     - name: Remover a unidade systemd --user
       ansible.builtin.file:
-        path: "{{ ansible_facts.env.HOME }}/.config/systemd/user/{{ proton_pass_ssh_agent_load_unit }}"
+        path: "{{ lookup('env', 'HOME') }}/.config/systemd/user/{{ proton_pass_ssh_agent_load_unit }}"
         state: absent
       notify: reload systemd --user (proton-pass)
       tags: [proton-pass]
@@ -79,7 +79,7 @@
 
     - name: Remover a variável de ambiente do backend de keyring do pass-cli
       ansible.builtin.file:
-        path: "{{ ansible_facts.env.HOME }}/.config/environment.d/25-proton-pass-keyring.conf"
+        path: "{{ lookup('env', 'HOME') }}/.config/environment.d/25-proton-pass-keyring.conf"
         state: absent
       tags: [proton-pass]
 
@@ -145,7 +145,7 @@
       when: item.rc == 0
       vars:
         keepassxc_native_messaging_dir: >-
-          {{ ansible_facts.env.HOME }}/.var/app/{{ item.item.flatpak_id }}/{{
+          {{ lookup('env', 'HOME') }}/.var/app/{{ item.item.flatpak_id }}/{{
           '.mozilla/native-messaging-hosts' if item.item.kind == 'firefox'
           else 'config/' + item.item.vendor_dir + '/NativeMessagingHosts' }}
       tags: [keepassxc-browser]
@@ -160,7 +160,7 @@
       when: item.rc == 0
       vars:
         keepassxc_proxy_host_dest: >-
-          {{ ansible_facts.env.HOME }}/.var/app/{{ item.item.flatpak_id }}/data/keepassxc-proxy-host
+          {{ lookup('env', 'HOME') }}/.var/app/{{ item.item.flatpak_id }}/data/keepassxc-proxy-host
       tags: [keepassxc-browser]
 
     - name: Revogar o talk-name org.freedesktop.Flatpak concedido ao navegador

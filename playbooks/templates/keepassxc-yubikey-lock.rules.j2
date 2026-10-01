@@ -11,4 +11,4 @@
 # etc.) costumam não estar mais disponíveis; só o campo bruto PRODUCT é
 # confiável nesse ponto (mesma técnica usada por
 # /usr/lib/udev/rules.d/39-usbmuxd.rules neste sistema).
-ACTION=="remove", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ENV{PRODUCT}=="1050/*", RUN+="/usr/bin/systemd-run --no-block --quiet --collect --service-type=oneshot {{ keepassxc_yubikey_lock_script_dest }} {{ ansible_facts.env.USER }}"
+ACTION=="remove", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ENV{PRODUCT}=="1050/*", RUN+="/usr/bin/systemd-run --no-block --quiet --collect --service-type=oneshot {{ keepassxc_yubikey_lock_script_dest }} {{ lookup('env', 'USER') }}"

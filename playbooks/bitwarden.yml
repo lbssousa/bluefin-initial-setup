@@ -43,27 +43,27 @@
 
         - name: Criar ~/.config/environment.d
           ansible.builtin.file:
-            path: "{{ ansible_facts.env.HOME }}/.config/environment.d"
+            path: "{{ lookup('env', 'HOME') }}/.config/environment.d"
             state: directory
             mode: "0755"
 
         - name: Configurar SSH_AUTH_SOCK estático para IDEs e apps da sessão
           ansible.builtin.copy:
             src: 20-bitwarden-ssh-agent.conf
-            dest: "{{ ansible_facts.env.HOME }}/.config/environment.d/20-bitwarden-ssh-agent.conf"
+            dest: "{{ lookup('env', 'HOME') }}/.config/environment.d/20-bitwarden-ssh-agent.conf"
             mode: "0644"
             force: false
 
         - name: Criar ~/.config/systemd/user
           ansible.builtin.file:
-            path: "{{ ansible_facts.env.HOME }}/.config/systemd/user"
+            path: "{{ lookup('env', 'HOME') }}/.config/systemd/user"
             state: directory
             mode: "0755"
 
         - name: Instalar as unidades systemd --user do agente SSH do Bitwarden
           ansible.builtin.copy:
             src: "{{ item }}"
-            dest: "{{ ansible_facts.env.HOME }}/.config/systemd/user/{{ item }}"
+            dest: "{{ lookup('env', 'HOME') }}/.config/systemd/user/{{ item }}"
             mode: "0644"
             force: false
           loop: "{{ bitwarden_ssh_agent_units }}"
