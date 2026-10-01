@@ -182,6 +182,20 @@
             - reload udev rules
             - trigger udev
 
+        - name: Garantir que o diretório de módulos do p11-kit (OpenSC) existe
+          ansible.builtin.file:
+            path: /etc/pkcs11/modules
+            state: directory
+            mode: "0755"
+
+        - name: Instalar override do módulo OpenSC (YubiKey exclusiva pro GnuPG)
+          ansible.builtin.template:
+            src: opensc-p11-kit.module.j2
+            dest: /etc/pkcs11/modules/opensc.module
+            owner: root
+            group: root
+            mode: "0644"
+
     # ── Modo 2FA (YubiKey + senha obrigatórios) ───────────────────────
     - name: PAM via authselect — modo 2FA (YubiKey + senha)
       tags: [yubikey-mode-2fa]

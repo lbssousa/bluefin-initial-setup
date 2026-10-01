@@ -95,6 +95,20 @@
             - reload udev rules
             - trigger udev
 
+        - name: Garantir que o diretório de módulos do p11-kit (OpenSC) existe
+          ansible.builtin.file:
+            path: /etc/pkcs11/modules
+            state: directory
+            mode: "0755"
+
+        - name: Instalar override do módulo OpenSC (YubiKey exclusiva pro GnuPG)
+          ansible.builtin.template:
+            src: "{{ inventory_dir }}/playbooks/templates/opensc-p11-kit.module.j2"
+            dest: /etc/pkcs11/modules/opensc.module
+            owner: root
+            group: root
+            mode: "0644"
+
     # ── Importar a chave OpenPGP do cartão da YubiKey ──────────────────
     - name: Importar a chave pública OpenPGP do cartão da YubiKey
       tags: [yubikey-gpg-import]
