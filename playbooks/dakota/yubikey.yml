@@ -188,8 +188,11 @@
         # RestrictAddressFamilies=AF_UNIX) esconde o /dev/hidraw* da
         # YubiKey e o ~/.config/Yubico/u2f_keys — o pam_u2f falha em
         # silêncio e o PAM cai para digital/senha. Este drop-in abre só o
-        # mínimo: dispositivos hidraw, $HOME somente leitura e o
-        # AF_NETLINK que o libudev/libfido2 usam para enumerar.
+        # mínimo: dispositivos hidraw e de aleatoriedade, $HOME somente leitura e o
+        # AF_NETLINK que o libudev/libfido2 usam para enumerar, e
+        # /dev/urandom + /dev/random (o pam_u2f gera o desafio com eles;
+        # sem isso falha com "Failed to generate challenge", visto com
+        # `debug debug_file=syslog` no pam_u2f).
         - name: Garantir o diretório do drop-in do polkit-agent-helper
           ansible.builtin.file:
             path: "{{ yubikey_polkit_helper_dropin | dirname }}"
@@ -207,6 +210,8 @@
               [Service]
               PrivateDevices=no
               DeviceAllow=char-hidraw rw
+              DeviceAllow=/dev/urandom r
+              DeviceAllow=/dev/random r
               ProtectHome=read-only
               RestrictAddressFamilies=AF_UNIX AF_NETLINK
           notify: reload systemd
