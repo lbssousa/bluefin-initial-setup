@@ -109,6 +109,7 @@ yubikey_authselect_base_features:
 # "toque a chave"; "nouserok" deixa o PAM cair para digital/senha se o
 # usuário não tiver chaves registradas (nunca bloqueia o login).
 yubikey_pam_u2f_module: /usr/lib/x86_64-linux-gnu/security/pam_u2f.so
+yubikey_u2f_keys: "{{ lookup('env', 'HOME') }}/.config/Yubico/u2f_keys"
 yubikey_pam_u2f_line: "auth       sufficient   pam_u2f.so cue nouserok"
 yubikey_pcscd_dropin: /etc/systemd/system/pcscd.service.d/udevadm-settle.conf
 

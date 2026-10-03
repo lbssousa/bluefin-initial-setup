@@ -96,26 +96,57 @@
       tags: [yubikey-enroll]
       when: yubikey_pam_u2f_ok
       block:
+        # Arquivo vazio conta como "não registrado": uma tentativa que
+        # falhou antes (redirecionamento do shell cria o arquivo mesmo se
+        # o pamu2fcfg erra) não pode fazer as próximas execuções pularem
+        # o registro.
         - name: Verificar se já existe arquivo de chaves U2F
           ansible.builtin.stat:
-            path: "{{ lookup('env', 'HOME') }}/.config/Yubico/u2f_keys"
+            path: "{{ yubikey_u2f_keys }}"
           register: yubikey_keys_stat
+
+        - name: Definir se falta registrar a YubiKey
+          ansible.builtin.set_fact:
+            yubikey_needs_enroll: "{{ not yubikey_keys_stat.stat.exists or yubikey_keys_stat.stat.size == 0 }}"
 
         - name: Pedir para inserir a YubiKey
           ansible.builtin.pause:
             prompt: "Insira sua YubiKey na porta USB e pressione Enter para continuar"
-          when: not yubikey_keys_stat.stat.exists
+          when: yubikey_needs_enroll
+
+        # Sob o Ansible o pamu2fcfg não tem terminal para pedir o PIN
+        # FIDO2 (falha com FIDO_ERR_INVALID_ARGUMENT); o PIN é lido aqui
+        # (sem eco) e entregue pelo stdin. Se a YubiKey não pedir PIN, ele
+        # é ignorado — pode deixar em branco.
+        - name: Pedir o PIN FIDO2 da YubiKey (Enter se não houver PIN)
+          ansible.builtin.pause:
+            prompt: "PIN FIDO2 da YubiKey"
+            echo: false
+          register: yubikey_pin_prompt
+          when: yubikey_needs_enroll
 
         - name: Garantir que ~/.config/Yubico existe
           ansible.builtin.file:
-            path: "{{ lookup('env', 'HOME') }}/.config/Yubico"
+            path: "{{ yubikey_u2f_keys | dirname }}"
             state: directory
             mode: "0755"
-          when: not yubikey_keys_stat.stat.exists
+          when: yubikey_needs_enroll
 
         - name: Registrar a YubiKey (toque a chave quando o LED piscar)
-          ansible.builtin.shell: "umask 077; pamu2fcfg > {{ lookup('env', 'HOME') }}/.config/Yubico/u2f_keys"
-          when: not yubikey_keys_stat.stat.exists
+          # Grava em arquivo temporário e só então move: nunca deixa um
+          # u2f_keys vazio/parcial se o pamu2fcfg falhar.
+          ansible.builtin.shell: |
+            set -e
+            tmp=$(mktemp "{{ yubikey_u2f_keys }}.XXXXXX")
+            trap 'rm -f "$tmp"' EXIT
+            printf '%s\n' "$YUBIKEY_PIN" | pamu2fcfg > "$tmp"
+            test -s "$tmp"
+            mv "$tmp" "{{ yubikey_u2f_keys }}"
+          args:
+            executable: /bin/bash
+          environment:
+            YUBIKEY_PIN: "{{ yubikey_pin_prompt.user_input | default('') }}"
+          when: yubikey_needs_enroll
           changed_when: true
 
     # ── PAM — YubiKey para sudo / pkexec / run0 ───────────────────────
