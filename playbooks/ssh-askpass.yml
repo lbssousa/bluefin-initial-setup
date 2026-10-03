@@ -6,7 +6,8 @@
 # com "incorrect passphrase supplied" ao tentar assinar com a chave.
 #
 # Usa o primeiro askpass gráfico encontrado entre os candidatos (no
-# Bluefin/Dakota: gcr4-ssh-askpass, do GNOME, em /usr/libexec). Se
+# Bluefin/Dakota não traz nenhum por padrão: o gcr4-ssh-askpass NÃO
+# serve, só funciona quando chamado pelo gcr-ssh-agent). Se
 # nenhum existir, avisa e pula — não falha.
 #
 # Grava ~/.config/environment.d/30-ssh-askpass.conf, lido pelo
@@ -23,7 +24,6 @@
 
   vars:
     ssh_askpass_candidates:
-      - /usr/libexec/gcr4-ssh-askpass
       - /usr/libexec/openssh/gnome-ssh-askpass
       - /usr/libexec/openssh/ssh-askpass
       - /usr/lib/ssh/ssh-askpass
