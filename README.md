@@ -271,11 +271,8 @@ just libfprint-dakota   # Bluefin Dakota (playbook local, sem submódulo)
 - **Dakota**: `playbooks/dakota/libfprint.yml`, autocontido neste
   repositório e sem depender do submódulo (cujo README fala
   explicitamente de "desktop Fedora Atomic"). Mesma estratégia
-  (container distrobox descartável), mas instalando em **`/var/usrlocal`,
-  não `/usr/local`** — verificado em hardware real que, ao contrário do
-  OSTree clássico (onde `/usr/local` é um symlink gravável para
-  `/var/usrlocal`), no Dakota `/usr/local` é um diretório de verdade
-  embutido na imagem somente-leitura de `/usr`. Veja a seção
+  (container distrobox descartável), instalando em **`/usr/local`**
+  (no Dakota também é um symlink gravável para `/var/usrlocal`). Veja a seção
   ["Bluefin Dakota"](#bluefin-dakota) abaixo.
 
 Ambas rodam pela mesma escalação de privilégio das outras (`run0
@@ -393,7 +390,7 @@ regra udev/script do KeePassXC (tag `keepassxc-yubikey-lock`), da ponte
 de native messaging do KeePassXC com os navegadores Flatpak (tag
 `keepassxc-browser` — remove o manifesto, o wrapper e a permissão
 `talk-name` concedida a cada navegador) e, no Dakota, do install em
-`/var/usrlocal` + `fprintd.service` do libfprint (tag
+`/usr/local` + `fprintd.service` do libfprint (tag
 `libfprint-dakota`) — em todos os casos, sem remover a config pessoal
 (`kanata.kbd`) nem desinstalar pacotes via Homebrew. Mais automações de
 desinstalação devem ser adicionadas aqui com o tempo.

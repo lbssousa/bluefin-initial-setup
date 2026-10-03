@@ -122,7 +122,7 @@ neovim-dakota: _ensure-collections
 
 # Standalone, self-contained here: no submodule needed, and not imported
 # by site-dakota.yml.
-# libfprint (goodix538d) no Dakota — build + install em /var/usrlocal.
+# libfprint (goodix538d) no Dakota — build + install em /usr/local.
 libfprint-dakota: _ensure-collections
     {{ ap }} playbooks/dakota/libfprint.yml
 

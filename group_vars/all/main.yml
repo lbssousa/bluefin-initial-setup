@@ -202,7 +202,7 @@ dakota_libfprint_repo: https://github.com/lbssousa/libfprint.git
 dakota_libfprint_ref: ""
 dakota_libfprint_checkout_dir: "{{ lookup('env', 'HOME') }}/src/libfprint-goodix538d"
 dakota_libfprint_stage_dir: "{{ lookup('env', 'HOME') }}/src/libfprint-goodix538d-stage"
-dakota_libfprint_usrlocal_prefix: /var/usrlocal
+dakota_libfprint_usrlocal_prefix: /usr/local
 dakota_libfprint_usrlocal_libdir: "{{ dakota_libfprint_usrlocal_prefix }}/lib64"
 
 # Bash — autocomplete case-insensitive e history-substring-search
