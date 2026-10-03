@@ -31,6 +31,7 @@
     systemd_boot_console_mode: keep
     systemd_boot_editor: "no"
     systemd_boot_loader_info_var: /sys/firmware/efi/efivars/LoaderInfo-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f
+    systemd_boot_timeout_var: /sys/firmware/efi/efivars/LoaderConfigTimeout-4a67b082-0a4c-41cf-b6c7-440b29bb8c4f
     systemd_boot_esp_parttype: c12a7328-f81f-11d2-ba4b-00a0c93ec93b
 
   tasks:
@@ -127,6 +128,22 @@
                 - { key: timeout, value: "{{ systemd_boot_timeout }}" }
                 - { key: console-mode, value: "{{ systemd_boot_console_mode }}" }
                 - { key: editor, value: "{{ systemd_boot_editor }}" }
+
+            # A variável EFI LoaderConfigTimeout (gravada pelo menu — teclas
+            # t/T — ou por `bootctl set-timeout`) tem PRIORIDADE sobre o
+            # `timeout` do loader.conf. Se existir, o menu continua
+            # aparecendo mesmo com timeout 0 no arquivo; removê-la devolve
+            # o controle ao loader.conf.
+            - name: Ler a variável EFI LoaderConfigTimeout (sobrepõe o loader.conf)
+              ansible.builtin.command: strings -el {{ systemd_boot_timeout_var }}
+              register: systemd_boot_timeout_efivar
+              changed_when: false
+              failed_when: false
+
+            - name: Remover a variável LoaderConfigTimeout para valer o loader.conf
+              ansible.builtin.command: bootctl set-timeout ""
+              changed_when: true
+              when: systemd_boot_timeout_efivar.rc == 0
 
           always:
             - name: Desmontar a ESP temporária
