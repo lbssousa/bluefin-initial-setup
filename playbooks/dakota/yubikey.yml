@@ -9,14 +9,14 @@
 # `yubikey-reset` e a checagem de pacote `rpm -q pam-u2f` (Dakota não
 # tem banco RPM). O PAM é configurado de forma localizada, só nos dois
 # serviços que importam, pelas tarefas yubikey-enroll/yubikey-setup-pam
-# abaixo — sem mexer no /etc/pam.d/system-auth (que também serve login,
-# GDM e tela de bloqueio).
+# abaixo; o pam_u2f entra no /etc/pam.d/system-auth logo depois do
+# pam_fprintd (digital → YubiKey → senha).
 #
 # O que roda aqui:
 #   - yubikey-enroll + yubikey-setup-pam (NOVO): registra a YubiKey em
 #     ~/.config/Yubico/u2f_keys (pamu2fcfg) e adiciona
-#     `auth sufficient pam_u2f.so cue nouserok` ao PAM de `sudo` e de
-#     `polkit-1`. O polkit-1 cobre pkexec e run0 (run0 autentica via
+#     `auth sufficient pam_u2f.so cue nouserok` ao `system-auth`, após
+#     o pam_fprintd (vale para sudo, login/GDM e `polkit-1`). O polkit-1 cobre pkexec e run0 (run0 autentica via
 #     polkit, não por um serviço PAM próprio) — e é o que o diálogo do
 #     agente polkit do GNOME usa. "sufficient" + "nouserok": tocar a
 #     YubiKey basta (substitui a senha), mas se ela não estiver
@@ -149,38 +149,38 @@
           when: yubikey_needs_enroll
           changed_when: true
 
-    # ── PAM — YubiKey para sudo / pkexec / run0 ───────────────────────
-    # sudo: /etc/pam.d/sudo já existe. polkit-1: só existe em
-    # /usr/lib/pam.d (vendordir) — copiado para /etc/pam.d (force:
-    # false, só se ainda não houver um override) para poder editá-lo.
-    # A linha vai logo antes do `auth include system-auth`, então a
-    # YubiKey é tentada antes de digital/senha. Não alteramos
-    # /etc/pam.d/system-auth de propósito (afetaria login/GDM).
-    - name: PAM — pam_u2f em sudo e polkit-1 (sudo/pkexec/run0)
+    # ── PAM — YubiKey para sudo / pkexec / run0 / login ───────────────
+    # Ordem de autenticação desejada: digital → YubiKey → senha. Como
+    # `include` é atômico, a única forma de encaixar o pam_u2f entre o
+    # pam_fprintd e o pam_unix é editar /etc/pam.d/system-auth (arquivo
+    # local, sem cópia no vendordir), que sudo, polkit-1 (pkexec/run0 e
+    # o agente do GNOME), login e GDM incluem. A linha vai logo depois
+    # do pam_fprintd. "nouserok" + "sufficient": sem YubiKey conectada
+    # ou sem chaves registradas, cai para a senha. Limitação: o
+    # pam_fprintd só passa adiante após esgotar as tentativas/timeout.
+    - name: PAM — pam_u2f no system-auth, depois da digital (sudo/polkit-1/login)
       tags: [yubikey-setup-pam]
       become: true
       when: yubikey_pam_u2f_ok
       block:
-        - name: Garantir um override de /etc/pam.d/polkit-1 (cópia do vendor)
-          ansible.builtin.copy:
-            src: /usr/lib/pam.d/polkit-1
-            dest: /etc/pam.d/polkit-1
-            remote_src: true
-            owner: root
-            group: root
-            mode: "0644"
-            force: false
-
-        - name: Adicionar pam_u2f ao PAM de sudo e polkit-1
+        # Migração: versões anteriores colocavam o pam_u2f ANTES do
+        # system-auth em sudo e polkit-1 (YubiKey antes da digital).
+        - name: Remover o bloco antigo do pam_u2f de sudo e polkit-1
           ansible.builtin.blockinfile:
             path: "/etc/pam.d/{{ item }}"
             marker: "# {mark} yubikey pam_u2f (playbooks/dakota/yubikey.yml)"
-            insertbefore: '^auth\s+include\s+system-auth'
-            block: "{{ yubikey_pam_u2f_line }}"
-            mode: "0644"
+            state: absent
           loop:
             - sudo
             - polkit-1
+
+        - name: Adicionar pam_u2f ao system-auth, logo após o pam_fprintd
+          ansible.builtin.blockinfile:
+            path: /etc/pam.d/system-auth
+            marker: "# {mark} yubikey pam_u2f (playbooks/dakota/yubikey.yml)"
+            insertafter: '^auth\s+sufficient\s+pam_fprintd\.so'
+            block: "{{ yubikey_pam_u2f_line }}"
+            mode: "0644"
 
         # O PAM do polkit NÃO roda no pkexec: roda no
         # polkit-agent-helper@.service (socket-activated), cujo sandbox

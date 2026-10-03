@@ -304,10 +304,13 @@ PAM). Ainda em alpha. Por isso existe `site-dakota.yml`, espelhando
   Dakota, o PAM não é trocado globalmente: duas tarefas novas,
   `yubikey-enroll` (registra a YubiKey com `pamu2fcfg` em
   `~/.config/Yubico/u2f_keys`) e `yubikey-setup-pam`, adicionam
-  `auth sufficient pam_u2f.so cue nouserok` só ao PAM de `sudo` e de
-  `polkit-1` (este cobre `pkexec` e `run0`), sem tocar em
-  `system-auth` (login/GDM). Tocar a YubiKey basta; sem ela (ou sem
-  chaves registradas) cai para digital/senha — sem risco de lockout.
+  `auth sufficient pam_u2f.so cue nouserok` ao `system-auth`, logo
+  depois do `pam_fprintd` (vale para `sudo`, login/GDM e `polkit-1`,
+  que cobre `pkexec` e `run0`). Ordem: digital → YubiKey → senha (a
+  YubiKey só é pedida depois que a digital esgotar as tentativas).
+  Sem a YubiKey (ou sem chaves registradas) cai para a senha — sem
+  risco de lockout. Rodar de novo remove o bloco antigo de
+  `sudo`/`polkit-1`.
   O `pam_u2f.so` já vem na imagem; se faltar, a tarefa avisa e pula.
   Além disso, o que é OS-agnóstico: o fix da YubiKey ficando
   invisível para o GnuPG até reiniciar o `pcscd` na mão (tag
