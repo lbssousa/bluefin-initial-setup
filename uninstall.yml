@@ -132,6 +132,12 @@
         label: "{{ item.flatpak_id }}"
       tags: [keepassxc-browser]
 
+    - name: Remover o autostart do KeePassXC
+      ansible.builtin.file:
+        path: "{{ lookup('env', 'HOME') }}/.config/autostart/org.keepassxc.KeePassXC.desktop"
+        state: absent
+      tags: [keepassxc-autostart]
+
     # Um `block` não aceita `loop` diretamente em Ansible — por isso os
     # atributos loop/when/vars/tags abaixo são repetidos em cada task
     # individual, em vez de um block único.

@@ -35,14 +35,14 @@
       register: keepassxc_flatpak_check
       changed_when: false
       failed_when: false
-      tags: keepassxc-browser
+      tags: [keepassxc-browser, keepassxc-autostart]
 
     - name: Verificar se o KeePassXC está instalado (binário no PATH)
       ansible.builtin.command: which keepassxc
       register: keepassxc_bin_check
       changed_when: false
       failed_when: false
-      tags: keepassxc-browser
+      tags: [keepassxc-browser, keepassxc-autostart]
 
     - name: Avisar que o KeePassXC não foi encontrado (ponte de native messaging pulada)
       ansible.builtin.debug:
@@ -158,3 +158,34 @@
         (keepassxc_flatpak_check.rc == 0 or keepassxc_bin_check.rc == 0)
       changed_when: true
       tags: keepassxc-browser
+
+    # Autostart do KeePassXC no login da sessão gráfica. O KeePassXC do
+    # Flatpak não cria sozinho o ~/.config/autostart (a opção "Iniciar
+    # com o sistema" depende do portal Background) — então o .desktop é
+    # instalado aqui, e funciona igual para Flatpak ou binário no PATH.
+    # Se nenhum dos dois existir, pula (mesmo raciocínio do resto).
+    - name: Criar ~/.config/autostart
+      ansible.builtin.file:
+        path: "{{ lookup('env', 'HOME') }}/.config/autostart"
+        state: directory
+        mode: "0755"
+      when: keepassxc_flatpak_check.rc == 0 or keepassxc_bin_check.rc == 0
+      tags: keepassxc-autostart
+
+    - name: Autostart do KeePassXC no login
+      ansible.builtin.copy:
+        dest: "{{ lookup('env', 'HOME') }}/.config/autostart/org.keepassxc.KeePassXC.desktop"
+        mode: "0644"
+        content: |
+          [Desktop Entry]
+          Type=Application
+          Name=KeePassXC
+          Comment=Gerenciador de senhas
+          Icon=org.keepassxc.KeePassXC
+          Exec={{ '/usr/bin/flatpak run --branch=stable --arch=x86_64 --command=keepassxc org.keepassxc.KeePassXC'
+                  if keepassxc_flatpak_check.rc == 0 else 'keepassxc' }}
+          Terminal=false
+          X-GNOME-Autostart-enabled=true
+          # Gerenciado por playbooks/keepassxc.yml
+      when: keepassxc_flatpak_check.rc == 0 or keepassxc_bin_check.rc == 0
+      tags: keepassxc-autostart

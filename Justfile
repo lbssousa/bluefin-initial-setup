@@ -71,6 +71,10 @@ capslock: _ensure-collections
 keepassxc-yubikey-lock: _ensure-collections
     {{ ap }} site.yml --tags keepassxc-yubikey-lock
 
+# No root needed (writes ~/.config/autostart only).
+keepassxc-autostart: _ensure-collections
+    ansible-playbook site.yml --tags keepassxc-autostart
+
 # No root needed (writes to ~/.var/app/<browser>/... only).
 keepassxc-browser: _ensure-collections
     ansible-playbook site.yml --tags keepassxc-browser
@@ -131,6 +135,9 @@ capslock-dakota: _ensure-collections
 
 keepassxc-yubikey-lock-dakota: _ensure-collections
     {{ ap }} site-dakota.yml --tags keepassxc-yubikey-lock
+
+keepassxc-autostart-dakota: _ensure-collections
+    ansible-playbook site-dakota.yml --tags keepassxc-autostart
 
 keepassxc-browser-dakota: _ensure-collections
     ansible-playbook site-dakota.yml --tags keepassxc-browser
