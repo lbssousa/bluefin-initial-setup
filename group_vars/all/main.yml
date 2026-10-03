@@ -110,6 +110,7 @@ yubikey_authselect_base_features:
 # usuário não tiver chaves registradas (nunca bloqueia o login).
 yubikey_pam_u2f_module: /usr/lib/x86_64-linux-gnu/security/pam_u2f.so
 yubikey_u2f_keys: "{{ lookup('env', 'HOME') }}/.config/Yubico/u2f_keys"
+yubikey_polkit_helper_dropin: /etc/systemd/system/polkit-agent-helper@.service.d/yubikey-u2f.conf
 yubikey_pam_u2f_line: "auth       sufficient   pam_u2f.so cue nouserok"
 yubikey_pcscd_dropin: /etc/systemd/system/pcscd.service.d/udevadm-settle.conf
 

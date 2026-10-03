@@ -182,6 +182,35 @@
             - sudo
             - polkit-1
 
+        # O PAM do polkit NÃO roda no pkexec: roda no
+        # polkit-agent-helper@.service (socket-activated), cujo sandbox
+        # (PrivateDevices=yes, DevicePolicy=strict, ProtectHome=yes,
+        # RestrictAddressFamilies=AF_UNIX) esconde o /dev/hidraw* da
+        # YubiKey e o ~/.config/Yubico/u2f_keys — o pam_u2f falha em
+        # silêncio e o PAM cai para digital/senha. Este drop-in abre só o
+        # mínimo: dispositivos hidraw, $HOME somente leitura e o
+        # AF_NETLINK que o libudev/libfido2 usam para enumerar.
+        - name: Garantir o diretório do drop-in do polkit-agent-helper
+          ansible.builtin.file:
+            path: "{{ yubikey_polkit_helper_dropin | dirname }}"
+            state: directory
+            mode: "0755"
+
+        - name: Liberar a YubiKey e o u2f_keys no sandbox do polkit-agent-helper
+          ansible.builtin.copy:
+            dest: "{{ yubikey_polkit_helper_dropin }}"
+            owner: root
+            group: root
+            mode: "0644"
+            content: |
+              # Gerenciado por playbooks/dakota/yubikey.yml (yubikey-setup-pam)
+              [Service]
+              PrivateDevices=no
+              DeviceAllow=char-hidraw rw
+              ProtectHome=read-only
+              RestrictAddressFamilies=AF_UNIX AF_NETLINK
+          notify: reload systemd
+
     # ── pcscd — corrige a YubiKey ficando invisível para o GnuPG ──────
     # Mesma automação de playbooks/yubikey.yml (ver o cabeçalho de lá
     # para detalhes) — nada específico do Dakota. Cobre dois problemas
