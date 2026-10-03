@@ -91,11 +91,33 @@
     # 3. Checkout do fork (no host; o container só compila, já que o
     #    $HOME do container é o mesmo $HOME do host)
     # ---------------------------------------------------------------------
+    # Sem dakota_libfprint_ref definido, usa a tag mais recente do fork
+    # (ordenação por versão do git: v1.94.10-goodix538d.2 vem depois de
+    # v1.94.10-goodix538d). Fixe uma tag/branch/commit em
+    # group_vars/all/main.yml para sobrescrever.
+    - name: Descobrir a tag mais recente do fork do libfprint
+      ansible.builtin.command: >-
+        git ls-remote --tags --refs --sort=-v:refname {{ dakota_libfprint_repo }}
+      register: libfprint_remote_tags
+      changed_when: false
+      when: dakota_libfprint_ref | length == 0
+
+    - name: Definir a ref do libfprint a ser compilada
+      ansible.builtin.set_fact:
+        libfprint_ref: >-
+          {{ dakota_libfprint_ref
+             if dakota_libfprint_ref | length > 0
+             else libfprint_remote_tags.stdout_lines[0].split('refs/tags/')[1] }}
+
+    - name: Informar a ref do libfprint escolhida
+      ansible.builtin.debug:
+        msg: "libfprint: compilando a ref {{ libfprint_ref }}"
+
     - name: Clonar/atualizar o fork do libfprint
       ansible.builtin.git:
         repo: "{{ dakota_libfprint_repo }}"
         dest: "{{ dakota_libfprint_checkout_dir }}"
-        version: "{{ dakota_libfprint_ref }}"
+        version: "{{ libfprint_ref }}"
         force: false
       register: git_result
 
