@@ -1,11 +1,11 @@
 ---
 # Setup inicial de um desktop Bluefin Dakota recém-instalado — índice das
-# automações. Espelha site.yml (Fedora Atomic clássico), com duas
-# diferenças: o YubiKey e o libfprint usam versões próprias em
-# playbooks/dakota/, porque o Dakota é GNOME OS (não Fedora/RHEL) —
-# sem `authselect`, sem RPMs, publicado como imagem bootc sobre backend
-# composefs-oci (não rpm-ostree). Veja o cabeçalho de cada arquivo em
-# playbooks/dakota/ e a seção "Bluefin Dakota" do README para detalhes.
+# automações. Espelha site.yml (Fedora Atomic clássico), com uma
+# diferença: o YubiKey usa versão própria em playbooks/dakota/, porque o
+# Dakota é GNOME OS (não Fedora/RHEL) — sem `authselect`, sem RPMs,
+# publicado como imagem bootc sobre backend composefs-oci (não
+# rpm-ostree). Veja o cabeçalho de cada arquivo em playbooks/dakota/ e a
+# seção "Bluefin Dakota" do README para detalhes.
 #
 # Todos os outros playbooks (bitwarden, zed, users, printer, neovim,
 # capslock, keepassxc, bash) são os MESMOS arquivos usados por site.yml
@@ -25,13 +25,18 @@
 # Rode só uma automação com `--tags <tag>`, ou pule uma com
 # `--skip-tags <tag>`.
 #
-# Bitwarden e libfprint têm tag "never": não rodam com esse comando sem
-# --tags, só sob pedido explícito (--tags bitwarden / --tags libfprint).
+# Bitwarden e Proton Pass têm tag "never": não rodam com esse comando sem
+# --tags, só sob pedido explícito (--tags bitwarden / --tags proton-pass).
+#
+# O libfprint NÃO é importado aqui — é uma automação totalmente à parte
+# (só faz sentido em máquinas com o leitor Goodix 27c6:538d). Ela roda
+# standalone por `just libfprint-dakota`, que chama
+# playbooks/dakota/libfprint.yml direto — sem passar por este índice, e
+# sem depender do submódulo git external/bluefin-distrobox-libfprint (o
+# libfprint no Dakota é autocontido, veja playbooks/dakota/libfprint.yml).
 #
 # Uso: ./run-empowered.sh ansible-playbook site-dakota.yml
-# (privilégio via run0 --empower — veja ansible.cfg e run-empowered.sh;
-# não depende do submódulo git external/bluefin-distrobox-libfprint —
-# o libfprint no Dakota é autocontido, veja playbooks/dakota/libfprint.yml)
+# (privilégio via run0 --empower — veja ansible.cfg e run-empowered.sh)
 - name: Bitwarden — Flatpak + agente SSH + polkit (desbloqueio biométrico)
   # tag "never": não roda em `ansible-playbook site-dakota.yml` sem
   # --tags — só sob pedido explícito (--tags bitwarden / `just bitwarden-dakota`).
@@ -74,11 +79,8 @@
   ansible.builtin.import_playbook: playbooks/neovim.yml
   tags: [neovim]
 
-- name: libfprint (goodix538d) no Dakota — build em distrobox, sem o submódulo Fedora
-  # tag "never": não roda em `ansible-playbook site-dakota.yml` sem
-  # --tags — só sob pedido explícito (--tags libfprint / `just libfprint-dakota`).
-  ansible.builtin.import_playbook: playbooks/dakota/libfprint.yml
-  tags: [libfprint, never]
+# (o libfprint fica fora deste índice — veja o cabeçalho; roda por
+# `just libfprint-dakota`, chamando playbooks/dakota/libfprint.yml direto.)
 
 - name: Caps Lock via kanata (evdev, tap=Esc / hold=Ctrl)
   ansible.builtin.import_playbook: playbooks/capslock.yml

@@ -8,12 +8,17 @@ Também cobre o [Bluefin Dakota](https://docs.projectbluefin.io/dakota/)
 (GNOME OS, sem RPMs/`rpm-ostree`) via `site-dakota.yml` — veja a seção
 ["Bluefin Dakota"](#bluefin-dakota) abaixo.
 
-Cada automação é um playbook próprio em `playbooks/` (ou um submódulo git
-em `external/`), importado por `site.yml` via `ansible.builtin.import_playbook`
-— todas compartilham a mesma escalação de privilégio (`run0`, veja a seção
+Cada automação é um playbook próprio em `playbooks/`, importado por
+`site.yml` via `ansible.builtin.import_playbook` — todas compartilham a
+mesma escalação de privilégio (`run0`, veja a seção
 ["Privilégio: run0 --empower"](#privilégio-run0---empower) abaixo), mas
 cada uma tem sua própria tag: rode só uma com `--tags <tag>`, ou pule uma
 com `--skip-tags <tag>`.
+
+A única exceção é o **libfprint** (driver do leitor de digitais Goodix
+27c6:538d), que é standalone: não é importado por nenhum dos índices e
+roda por receita própria — veja
+["libfprint (goodix538d) — automação standalone"](#libfprint-goodix538d--automação-standalone).
 
 ## O que este playbook faz
 
@@ -183,16 +188,7 @@ com `--skip-tags <tag>`.
    plugins depois — veja `nvim/lua/plugins/*.lua` em
    [lbssousa/dotfiles](https://github.com/lbssousa/dotfiles)). Uma
    config já existente nunca é sobrescrita.
-9. **libfprint (goodix538d)** (submódulo `external/bluefin-distrobox-libfprint`, tag `libfprint`, **não roda por padrão** — tag `never`,
-   só sob pedido explícito: `--tags libfprint` / `just libfprint` / `just libfprint-dakota`) — compila e instala o driver do leitor de
-   digitais Goodix 27c6:538d, executando a automação do repositório
-   separado [lbssousa/bluefin-distrobox-libfprint](https://github.com/lbssousa/bluefin-distrobox-libfprint)
-   (trazido aqui como submódulo git, via `ansible.builtin.import_playbook`,
-   então roda dentro da mesma escalação de privilégio via run0). Requer
-   o submódulo inicializado antes (`git submodule update --init
-   --recursive`, ou simplesmente `just libfprint`, que faz isso
-   sozinho).
-10. **Caps Lock via kanata** (`playbooks/capslock.yml`, tag `capslock`) — instala o
+9. **Caps Lock via kanata** (`playbooks/capslock.yml`, tag `capslock`) — instala o
    [kanata](https://github.com/jtroo/kanata) via Homebrew e remapeia o
    Caps Lock a nível evdev: toque rápido vira `Esc`, segurado vira
    `Ctrl`, e Shift+toque preserva o Caps Lock original. Por operar em
@@ -206,7 +202,7 @@ com `--skip-tags <tag>`.
    (`modules/system/core/localization.nix`). Mesmo raciocínio do Neovim
    e do Zed acima: `~/.config/kanata/kanata.kbd` só é copiado se ainda
    não existir, nunca sobrescrito.
-11. **KeePassXC — ponte de native messaging** (`playbooks/keepassxc.yml`, tag `keepassxc-browser`,
+10. **KeePassXC — ponte de native messaging** (`playbooks/keepassxc.yml`, tag `keepassxc-browser`,
     também coberta pela tag `keepassxc`) — ponte de *native messaging*
     entre o Flatpak do KeePassXC e os Flatpaks dos navegadores
     suportados (Firefox, Chrome, Brave, Chromium, Edge — lista em
@@ -228,7 +224,7 @@ com `--skip-tags <tag>`.
     automação avisa e pula em vez de falhar — mesmo comportamento da
     trava ao remover a YubiKey (item 5 acima), que agora mora em
     `playbooks/yubikey.yml`.
-12. **Bash com cara de Fish** (`playbooks/bash.yml`, tag guarda-chuva `bash`) — dois blocos
+11. **Bash com cara de Fish** (`playbooks/bash.yml`, tag guarda-chuva `bash`) — dois blocos
     independentes, cada um com sua própria sub-tag:
     - `bash-completion` — autocomplete case-insensitive
       (`completion-ignore-case`) e history-substring-search (setas
@@ -250,6 +246,42 @@ com `--skip-tags <tag>`.
       diferente do Neovim/Zed/kanata, aqui o objetivo é garantir que as
       linhas específicas existam dentro de um arquivo que o usuário já
       tem e continua controlando o resto.
+
+### libfprint (goodix538d) — automação standalone
+
+O driver do leitor de digitais Goodix 27c6:538d **não faz parte do
+`site.yml`** (nem do `site-dakota.yml`). Ele só faz sentido em máquinas
+com esse leitor específico, então vive fora do índice — o setup inicial
+não paga nem o parse nem a dependência de submódulo do Git por causa
+dele. Roda por receita própria:
+
+```bash
+just libfprint          # Fedora Atomic clássico (submódulo git)
+just libfprint-dakota   # Bluefin Dakota (playbook local, sem submódulo)
+```
+
+- **Fedora**: executa a automação do repositório separado
+  [lbssousa/bluefin-distrobox-libfprint](https://github.com/lbssousa/bluefin-distrobox-libfprint),
+  trazido aqui como submódulo git em `external/bluefin-distrobox-libfprint`
+  e chamado direto (`external/bluefin-distrobox-libfprint/site.yml`) —
+  `just libfprint` roda `git submodule update --init --recursive` antes,
+  então não precisa de passo manual. Compila o fork
+  [lbssousa/libfprint](https://github.com/lbssousa/libfprint) num
+  container distrobox e instala em `/usr/local`.
+- **Dakota**: `playbooks/dakota/libfprint.yml`, autocontido neste
+  repositório e sem depender do submódulo (cujo README fala
+  explicitamente de "desktop Fedora Atomic"). Mesma estratégia
+  (container distrobox descartável), mas instalando em **`/var/usrlocal`,
+  não `/usr/local`** — verificado em hardware real que, ao contrário do
+  OSTree clássico (onde `/usr/local` é um symlink gravável para
+  `/var/usrlocal`), no Dakota `/usr/local` é um diretório de verdade
+  embutido na imagem somente-leitura de `/usr`. Veja a seção
+  ["Bluefin Dakota"](#bluefin-dakota) abaixo.
+
+Ambas rodam pela mesma escalação de privilégio das outras (`run0
+--empower`, via `run-empowered.sh`). Desfazer: `uninstall.yml` com a tag
+`libfprint-dakota` cobre o caso do Dakota; o Fedora tem o
+`external/bluefin-distrobox-libfprint/uninstall.yml` próprio.
 
 Mais automações devem ser adicionadas a este repositório com o tempo.
 
@@ -291,21 +323,13 @@ PAM). Ainda em alpha. Por isso existe `site-dakota.yml`, espelhando
   `yubikey-mode-replace`, `yubikey-mode-2fa`, `yubikey-test` e
   `yubikey-reset` de `playbooks/yubikey.yml` (baseadas em `authselect`)
   **não têm equivalente no Dakota por enquanto**.
-- **libfprint** (`playbooks/dakota/libfprint.yml`, **não roda por padrão** —
-  tag `never`, só sob pedido explícito: `--tags libfprint` / `just
-  libfprint-dakota`) — build e instalação autocontidos neste repositório, sem depender do submódulo
-  `external/bluefin-distrobox-libfprint` (cujo README fala
-  explicitamente de "desktop Fedora Atomic"). Mesma estratégia (compilar
-  o fork [lbssousa/libfprint](https://github.com/lbssousa/libfprint) num
-  container distrobox descartável —
-  `playbooks/files/dakota-libfprint-distrobox.ini`), mas instalando em
-  **`/var/usrlocal`, não `/usr/local`**: verificado em hardware real que,
-  ao contrário do OSTree clássico (onde `/usr/local` é um symlink para
-  `/var/usrlocal`, logo gravável), no Dakota `/usr/local` é um diretório
-  de verdade embutido na imagem somente-leitura de `/usr` — escrever lá
-  falha com "Read-only file system". `/var/usrlocal` existe na imagem
-  (gravável, no `/var` em btrfs) mas não vem ligado a `/usr/local` por
-  nenhum fstab/unit, então a automação usa esse caminho diretamente.
+- **libfprint** (`playbooks/dakota/libfprint.yml`, **standalone** — não
+  importado pelo `site-dakota.yml`; só sob pedido explícito via `just
+  libfprint-dakota`) — build e instalação autocontidos neste repositório,
+  sem depender do submódulo `external/bluefin-distrobox-libfprint` (cujo
+  README fala explicitamente de "desktop Fedora Atomic"). Detalhes no
+  item ["libfprint (goodix538d) — automação
+  standalone"](#libfprint-goodix538d--automação-standalone) acima.
 
 Todos os outros playbooks (`zed`, `users`, `printer`, `neovim`,
 `capslock`, `keepassxc`, `proton-pass`, e o próprio `bitwarden`, que
@@ -313,9 +337,9 @@ também não roda por padrão no Dakota) são os **mesmos arquivos** usados
 pelo `site.yml` clássico — Homebrew e Podman já vêm pré-instalados nas
 imagens Dakota, então nenhuma adaptação de conteúdo foi necessária.
 
-Assim como no `site.yml` clássico, `bitwarden`, `proton-pass` e
-`libfprint` têm tag `never` — nenhum dos três roda com `just
-setup-dakota` sem pedido explícito.
+Assim como no `site.yml` clássico, `bitwarden` e `proton-pass` têm tag
+`never` — nenhum dos dois roda com `just setup-dakota` sem pedido
+explícito (o libfprint nem é importado por esse índice).
 
 - **VSCode** (`playbooks/dakota/vscode.yml`, tag `vscode`) — instala o
   VSCode via `snap` (`community.general.snap`, confinamento `classic`,
@@ -336,8 +360,9 @@ vez, deixou de depender do `ujust`/Homebrew — é instalado pela
 automação `playbooks/dakota/vscode.yml` descrita acima.
 
 ```bash
-just setup-dakota                    # tudo, exceto Bitwarden e libfprint — como o `just setup` clássico
-just <tag>-dakota                    # uma automação isolada, ex.: just libfprint-dakota
+just setup-dakota                    # tudo, exceto Bitwarden — o libfprint nem entra aqui
+just <tag>-dakota                    # uma automação isolada, ex.: just zed-dakota
+just libfprint-dakota                # o libfprint standalone (fora do site-dakota.yml)
 ansible-playbook site-dakota.yml --tags yubikey-gpg-import   # sem become: roda sem run-empowered.sh
 ```
 
@@ -405,8 +430,8 @@ migrar para `ansible-vault`.
   rede via mDNS — necessário apenas para a automação da impressora;
   pule com `--skip-tags printer` se não for usá-la.
 - `distrobox` (padrão no Bluefin/uBlue) — necessário apenas para a
-  automação do libfprint, que não roda por padrão (tag `never`); use
-  `--tags libfprint` / `just libfprint` para rodá-la explicitamente.
+  automação do libfprint, que é standalone (não entra em `just setup`);
+  use `just libfprint` / `just libfprint-dakota` para rodá-la.
 - [Homebrew](https://brew.sh) instalado em `/home/linuxbrew/.linuxbrew`
   (padrão nas imagens uBlue/Bluefin com o *homebrew module* habilitado).
 - [`just`](https://github.com/casey/just) (opcional, mas recomendado —
@@ -463,19 +488,19 @@ cd bluefin-initial-setup
 just setup
 ```
 
-(`--recurse-submodules` no clone não é necessário: `just setup` não
-inclui o libfprint, que é a única automação que depende de submódulo
-— veja o item 8 acima. Rodando `just libfprint` depois, o submódulo é
-inicializado automaticamente.)
+(`--recurse-submodules` no clone não é necessário: `just setup` não toca
+no libfprint, a única automação que depende de submódulo — ele é
+standalone, e `just libfprint` inicializa o submódulo sozinho antes de
+rodar.)
 
 Ou diretamente com Ansible:
 
 ```bash
 ansible-galaxy collection install -r requirements.yml
 ./run-empowered.sh ansible-playbook site.yml
-# opcional, só para o libfprint (tag `never`, não roda no comando acima):
+# opcional, só para o libfprint (standalone, fora do site.yml):
 git submodule update --init --recursive
-./run-empowered.sh ansible-playbook site.yml --tags libfprint
+./run-empowered.sh ansible-playbook external/bluefin-distrobox-libfprint/site.yml
 ```
 
 O playbook é idempotente — rodar de novo é seguro e só aplica o que
@@ -485,7 +510,7 @@ ainda não estiver no estado desejado.
 
 | Arquivo/Diretório      | Papel                                                          |
 |-------------------------|-----------------------------------------------------------------|
-| `site.yml`               | Índice: importa cada `playbooks/*.yml` com sua tag (Fedora Atomic clássico) |
+| `site.yml`               | Índice: importa cada `playbooks/*.yml` com sua tag (Fedora Atomic clássico). Não inclui o libfprint (standalone) |
 | `site-dakota.yml`        | Mesmo índice para o Bluefin Dakota — veja a seção "Bluefin Dakota" acima |
 | `uninstall.yml`          | Desinstalação — playbook independente, tags por automação        |
 | `ansible.cfg`            | Config do Ansible — `become_method = community.general.run0` (veja "Privilégio: run0 --empower" acima) |
@@ -504,7 +529,7 @@ ainda não estiver no estado desejado.
 | `playbooks/ssh-askpass.yml` | ssh-askpass gráfico (gcr4-ssh-askpass) como padrão da sessão via `environment.d` — PIN da YubiKey sem TTY (tag `ssh-askpass`); pula se não houver nenhum |
 | `playbooks/bash.yml`      | Bash com cara de Fish — completion case-insensitive + history-substring-search + ble.sh (tags `bash-completion`/`blesh`) |
 | `playbooks/dakota/yubikey.yml`   | YubiKey no Dakota — `yubikey-enroll` + `yubikey-setup-pam` (pam_u2f em sudo/polkit-1) + `yubikey-setup-pcscd` + `yubikey-gpg-import`; + trava do KeePassXC (`keepassxc-yubikey-lock`) |
-| `playbooks/dakota/libfprint.yml` | libfprint no Dakota — build/install autocontidos, sem o submódulo |
+| `playbooks/dakota/libfprint.yml` | libfprint no Dakota — build/install autocontidos, sem o submódulo; standalone (não importado pelo `site-dakota.yml`) |
 | `playbooks/dakota/vscode.yml`    | VSCode no Dakota — instalação via snap (tag `vscode`), falha graciosamente se o snapd não estiver disponível |
 | `playbooks/files/`        | Arquivos estáticos copiados como estão via `copy` (unidades systemd, polkit action, environment.d, script wrapper do KeePassXC-Browser, distrobox.ini do libfprint no Dakota) — compartilhado pelos playbooks acima |
 | `playbooks/templates/`    | Arquivos `.j2` renderizados via `template` (regra udev do KeePassXC-YubiKey-lock, unidade do kanata, manifesto do KeePassXC-Browser, script + unidade `systemd --user` do agente SSH do Proton Pass). Módulo `template` só busca em `templates/`, não em `files/` — por isso ficam num diretório separado (`dakota-fprintd-override.conf.j2` é a exceção: referenciado por caminho absoluto em `playbooks/dakota/libfprint.yml`, já que aquele playbook não mora em `playbooks/`) |
@@ -512,7 +537,7 @@ ainda não estiver no estado desejado.
 | `group_vars/all/local_users.yml.example` | Template dos usuários adicionais (copie para `local_users.yml`) |
 | `group_vars/all/local_users.yml` | Dados reais dos usuários adicionais — local, fora do git    |
 | `requirements.yml`       | Collections Ansible necessárias (`community.general`)           |
-| `external/bluefin-distrobox-libfprint` | Submódulo git com a automação do libfprint para Fedora (repo separado, tag `libfprint`) — não usado pelo Dakota |
+| `external/bluefin-distrobox-libfprint` | Submódulo git com a automação do libfprint para Fedora (repo separado, roda standalone via `just libfprint`) — não usado pelo Dakota |
 | `.gitmodules`             | Declaração do submódulo acima                                    |
 | `Justfile`               | Atalhos (`just setup`, `just setup-dakota`, `just <tag>`/`just <tag>-dakota` por automação) |
 

@@ -10,10 +10,15 @@
 # `--skip-tags <tag>` (ex.: máquinas sem a impressora). Veja o comentário
 # de cada playbooks/*.yml para detalhes.
 #
-# Bitwarden e libfprint têm tag "never": não rodam com esse comando sem
-# --tags, só sob pedido explícito (--tags bitwarden / --tags libfprint).
-# O libfprint também requer o submódulo git inicializado antes:
-# git submodule update --init --recursive
+# Bitwarden e Proton Pass têm tag "never": não rodam com esse comando sem
+# --tags, só sob pedido explícito (--tags bitwarden / --tags proton-pass).
+#
+# O libfprint NÃO é importado aqui — é uma automação totalmente à parte
+# (só faz sentido em máquinas com o leitor Goodix 27c6:538d, e depende do
+# submódulo git external/bluefin-distrobox-libfprint). Ele roda
+# standalone por `just libfprint`, que inicializa o submódulo e chama
+# external/bluefin-distrobox-libfprint/site.yml direto — sem passar por
+# este índice.
 #
 # Uso: ./run-empowered.sh ansible-playbook site.yml
 - name: Bitwarden — Flatpak + agente SSH + polkit (desbloqueio biométrico)
@@ -56,11 +61,9 @@
   ansible.builtin.import_playbook: playbooks/neovim.yml
   tags: [neovim]
 
-- name: libfprint (goodix538d) — github.com/lbssousa/bluefin-distrobox-libfprint
-  # tag "never": não roda em `ansible-playbook site.yml` sem --tags —
-  # só sob pedido explícito (--tags libfprint / `just libfprint`).
-  ansible.builtin.import_playbook: external/bluefin-distrobox-libfprint/site.yml
-  tags: [libfprint, never]
+# (o libfprint fica fora deste índice — veja o cabeçalho; roda por
+# `just libfprint`, chamando external/bluefin-distrobox-libfprint/site.yml
+# direto.)
 
 - name: Caps Lock via kanata (evdev, tap=Esc / hold=Ctrl)
   ansible.builtin.import_playbook: playbooks/capslock.yml
