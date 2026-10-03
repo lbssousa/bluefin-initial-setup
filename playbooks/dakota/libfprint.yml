@@ -32,6 +32,19 @@
   connection: local
   gather_facts: true
 
+  # O distrobox (assemble/enter) recusa rodar se SUDO_USER ou DOAS_USER
+  # estiverem definidos ("Running distrobox-assemble via SUDO/DOAS is not
+  # supported"). O `run0 --empower` (veja run-empowered.sh) exporta
+  # SUDO_USER & cia. para o processo inteiro por compatibilidade com o
+  # sudo, mesmo as tarefas de usuário sem `become` herdam isso — então
+  # zeramos aqui (o distrobox só testa `-n`, string vazia basta).
+  environment:
+    SUDO_USER: ""
+    SUDO_UID: ""
+    SUDO_GID: ""
+    SUDO_COMMAND: ""
+    DOAS_USER: ""
+
   pre_tasks:
     - name: Garantir que o distrobox está disponível
       ansible.builtin.command: distrobox --version
