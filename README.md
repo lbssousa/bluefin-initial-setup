@@ -272,19 +272,25 @@ PAM). Ainda em alpha. Por isso existe `site-dakota.yml`, espelhando
 `site.yml` tag por tag, com duas diferenças:
 
 - **YubiKey** (`playbooks/dakota/yubikey.yml`) — sem `authselect` no
-  Dakota (e sem substituto documentado ainda), este arquivo **não mexe
-  em PAM**. Mantém só o que é OS-agnóstico: o fix da YubiKey ficando
+  Dakota, o PAM não é trocado globalmente: duas tarefas novas,
+  `yubikey-enroll` (registra a YubiKey com `pamu2fcfg` em
+  `~/.config/Yubico/u2f_keys`) e `yubikey-setup-pam`, adicionam
+  `auth sufficient pam_u2f.so cue nouserok` só ao PAM de `sudo` e de
+  `polkit-1` (este cobre `pkexec` e `run0`), sem tocar em
+  `system-auth` (login/GDM). Tocar a YubiKey basta; sem ela (ou sem
+  chaves registradas) cai para digital/senha — sem risco de lockout.
+  O `pam_u2f.so` já vem na imagem; se faltar, a tarefa avisa e pula.
+  Além disso, o que é OS-agnóstico: o fix da YubiKey ficando
   invisível para o GnuPG até reiniciar o `pcscd` na mão (tag
   `yubikey-setup-pcscd`), uma tarefa nova, `yubikey-gpg-import`,
   que importa a chave pública OpenPGP do cartão da YubiKey
   (`gpg --card-status` + `gpg --edit-card fetch`) para o keyring local,
   e a mesma trava do KeePassXC ao remover a YubiKey (tag
   `keepassxc-yubikey-lock`) de `playbooks/yubikey.yml` — genérica o
-  bastante para não precisar de nenhuma adaptação aqui. As etapas de
-  PAM/authselect de `playbooks/yubikey.yml` (`yubikey-enroll`,
-  `yubikey-setup-pam`, `yubikey-mode-replace`, `yubikey-mode-2fa`,
-  `yubikey-test`, `yubikey-reset`) **não têm equivalente no Dakota por
-  enquanto**.
+  bastante para não precisar de nenhuma adaptação aqui. As etapas
+  `yubikey-mode-replace`, `yubikey-mode-2fa`, `yubikey-test` e
+  `yubikey-reset` de `playbooks/yubikey.yml` (baseadas em `authselect`)
+  **não têm equivalente no Dakota por enquanto**.
 - **libfprint** (`playbooks/dakota/libfprint.yml`, **não roda por padrão** —
   tag `never`, só sob pedido explícito: `--tags libfprint` / `just
   libfprint-dakota`) — build e instalação autocontidos neste repositório, sem depender do submódulo
@@ -497,7 +503,7 @@ ainda não estiver no estado desejado.
 | `playbooks/systemd-boot.yml` | systemd-boot flicker-free — `loader.conf` da ESP com `timeout 0`, `console-mode keep`, `editor no` (tag `systemd-boot`); pula se o bootloader não for systemd-boot |
 | `playbooks/ssh-askpass.yml` | ssh-askpass gráfico (gcr4-ssh-askpass) como padrão da sessão via `environment.d` — PIN da YubiKey sem TTY (tag `ssh-askpass`); pula se não houver nenhum |
 | `playbooks/bash.yml`      | Bash com cara de Fish — completion case-insensitive + history-substring-search + ble.sh (tags `bash-completion`/`blesh`) |
-| `playbooks/dakota/yubikey.yml`   | YubiKey no Dakota — `yubikey-setup-pcscd` + `yubikey-gpg-import`, sem PAM; + trava do KeePassXC (`keepassxc-yubikey-lock`) |
+| `playbooks/dakota/yubikey.yml`   | YubiKey no Dakota — `yubikey-enroll` + `yubikey-setup-pam` (pam_u2f em sudo/polkit-1) + `yubikey-setup-pcscd` + `yubikey-gpg-import`; + trava do KeePassXC (`keepassxc-yubikey-lock`) |
 | `playbooks/dakota/libfprint.yml` | libfprint no Dakota — build/install autocontidos, sem o submódulo |
 | `playbooks/dakota/vscode.yml`    | VSCode no Dakota — instalação via snap (tag `vscode`), falha graciosamente se o snapd não estiver disponível |
 | `playbooks/files/`        | Arquivos estáticos copiados como estão via `copy` (unidades systemd, polkit action, environment.d, script wrapper do KeePassXC-Browser, distrobox.ini do libfprint no Dakota) — compartilhado pelos playbooks acima |

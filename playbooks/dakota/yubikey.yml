@@ -4,14 +4,26 @@
 #
 # O Dakota é GNOME OS (não Fedora/RHEL) — não tem `authselect`, a
 # ferramenta que playbooks/yubikey.yml usa para trocar/reforçar o PAM
-# (login/sudo), e não há (ainda) um substituto documentado. Por isso,
-# DELIBERADAMENTE FICAM DE FORA deste arquivo: `yubikey-setup-pam`,
+# globalmente. DELIBERADAMENTE FICAM DE FORA deste arquivo:
 # `yubikey-mode-replace`, `yubikey-mode-2fa`, `yubikey-test`,
-# `yubikey-reset`, o registro U2F/FIDO2 (`yubikey-enroll`, que só faz
-# sentido como insumo do PAM via pam-u2f) e a checagem de pacote
-# `rpm -q pam-u2f` (Dakota não tem banco RPM).
+# `yubikey-reset` e a checagem de pacote `rpm -q pam-u2f` (Dakota não
+# tem banco RPM). O PAM é configurado de forma localizada, só nos dois
+# serviços que importam, pelas tarefas yubikey-enroll/yubikey-setup-pam
+# abaixo — sem mexer no /etc/pam.d/system-auth (que também serve login,
+# GDM e tela de bloqueio).
 #
-# O que continua fazendo sentido aqui, por ser genérico o bastante:
+# O que roda aqui:
+#   - yubikey-enroll + yubikey-setup-pam (NOVO): registra a YubiKey em
+#     ~/.config/Yubico/u2f_keys (pamu2fcfg) e adiciona
+#     `auth sufficient pam_u2f.so cue nouserok` ao PAM de `sudo` e de
+#     `polkit-1`. O polkit-1 cobre pkexec e run0 (run0 autentica via
+#     polkit, não por um serviço PAM próprio) — e é o que o diálogo do
+#     agente polkit do GNOME usa. "sufficient" + "nouserok": tocar a
+#     YubiKey basta (substitui a senha), mas se ela não estiver
+#     conectada, ou o usuário não tiver chaves registradas, o PAM cai
+#     para o fluxo normal (digital/senha) — nenhum risco de lockout. O
+#     pam_u2f.so e o pamu2fcfg já vêm na imagem (nada instalado aqui);
+#     se faltarem, a tarefa avisa e pula.
 #   - yubikey-setup-pcscd: mesmo fix de playbooks/yubikey.yml para a
 #     YubiKey ficando invisível para o GnuPG até reiniciar o pcscd na
 #     mão — drop-in systemd (corrida com o udev no boot) + regra udev
@@ -30,12 +42,39 @@
 #     adaptação no Dakota. Se o KeePassXC não estiver instalado, a
 #     tarefa avisa e pula (não falha) — ver o motivo no cabeçalho de
 #     playbooks/yubikey.yml.
-- name: YubiKey no Dakota (pcscd + import da chave GPG, sem PAM) + trava do KeePassXC
+- name: YubiKey no Dakota (pam_u2f em sudo/polkit + pcscd + import da chave GPG) + trava do KeePassXC
   hosts: localhost
   connection: local
   gather_facts: true
 
   pre_tasks:
+    - name: Procurar o módulo pam_u2f.so
+      ansible.builtin.stat:
+        path: "{{ yubikey_pam_u2f_module }}"
+      register: yubikey_pam_u2f_stat
+      tags: [yubikey-enroll, yubikey-setup-pam]
+
+    - name: Verificar se o pamu2fcfg está disponível
+      ansible.builtin.command: which pamu2fcfg
+      register: yubikey_pamu2fcfg_check
+      changed_when: false
+      failed_when: false
+      tags: [yubikey-enroll, yubikey-setup-pam]
+
+    - name: Definir se o pam_u2f está utilizável
+      ansible.builtin.set_fact:
+        yubikey_pam_u2f_ok: "{{ yubikey_pam_u2f_stat.stat.exists and yubikey_pamu2fcfg_check.rc == 0 }}"
+      tags: [yubikey-enroll, yubikey-setup-pam]
+
+    - name: Avisar e pular se o pam_u2f/pamu2fcfg não estiverem na imagem
+      ansible.builtin.debug:
+        msg: >-
+          pam_u2f.so ({{ yubikey_pam_u2f_module }}) e/ou pamu2fcfg não
+          encontrados — pulando yubikey-enroll e yubikey-setup-pam. A
+          instalação do pacote fica fora desta automação.
+      when: not yubikey_pam_u2f_ok
+      tags: [yubikey-enroll, yubikey-setup-pam]
+
     - name: Verificar se o KeePassXC está instalado (Flatpak)
       ansible.builtin.command: flatpak info org.keepassxc.KeePassXC
       register: keepassxc_flatpak_check
@@ -51,6 +90,67 @@
       tags: [keepassxc-yubikey-lock]
 
   tasks:
+    # ── Registro da primeira YubiKey ──────────────────────────────────
+    # Mesma tarefa de playbooks/yubikey.yml (nada específico de distro).
+    - name: Registro da YubiKey
+      tags: [yubikey-enroll]
+      when: yubikey_pam_u2f_ok
+      block:
+        - name: Verificar se já existe arquivo de chaves U2F
+          ansible.builtin.stat:
+            path: "{{ lookup('env', 'HOME') }}/.config/Yubico/u2f_keys"
+          register: yubikey_keys_stat
+
+        - name: Pedir para inserir a YubiKey
+          ansible.builtin.pause:
+            prompt: "Insira sua YubiKey na porta USB e pressione Enter para continuar"
+          when: not yubikey_keys_stat.stat.exists
+
+        - name: Garantir que ~/.config/Yubico existe
+          ansible.builtin.file:
+            path: "{{ lookup('env', 'HOME') }}/.config/Yubico"
+            state: directory
+            mode: "0755"
+          when: not yubikey_keys_stat.stat.exists
+
+        - name: Registrar a YubiKey (toque a chave quando o LED piscar)
+          ansible.builtin.shell: "umask 077; pamu2fcfg > {{ lookup('env', 'HOME') }}/.config/Yubico/u2f_keys"
+          when: not yubikey_keys_stat.stat.exists
+          changed_when: true
+
+    # ── PAM — YubiKey para sudo / pkexec / run0 ───────────────────────
+    # sudo: /etc/pam.d/sudo já existe. polkit-1: só existe em
+    # /usr/lib/pam.d (vendordir) — copiado para /etc/pam.d (force:
+    # false, só se ainda não houver um override) para poder editá-lo.
+    # A linha vai logo antes do `auth include system-auth`, então a
+    # YubiKey é tentada antes de digital/senha. Não alteramos
+    # /etc/pam.d/system-auth de propósito (afetaria login/GDM).
+    - name: PAM — pam_u2f em sudo e polkit-1 (sudo/pkexec/run0)
+      tags: [yubikey-setup-pam]
+      become: true
+      when: yubikey_pam_u2f_ok
+      block:
+        - name: Garantir um override de /etc/pam.d/polkit-1 (cópia do vendor)
+          ansible.builtin.copy:
+            src: /usr/lib/pam.d/polkit-1
+            dest: /etc/pam.d/polkit-1
+            remote_src: true
+            owner: root
+            group: root
+            mode: "0644"
+            force: false
+
+        - name: Adicionar pam_u2f ao PAM de sudo e polkit-1
+          ansible.builtin.blockinfile:
+            path: "/etc/pam.d/{{ item }}"
+            marker: "# {mark} yubikey pam_u2f (playbooks/dakota/yubikey.yml)"
+            insertbefore: '^auth\s+include\s+system-auth'
+            block: "{{ yubikey_pam_u2f_line }}"
+            mode: "0644"
+          loop:
+            - sudo
+            - polkit-1
+
     # ── pcscd — corrige a YubiKey ficando invisível para o GnuPG ──────
     # Mesma automação de playbooks/yubikey.yml (ver o cabeçalho de lá
     # para detalhes) — nada específico do Dakota. Cobre dois problemas

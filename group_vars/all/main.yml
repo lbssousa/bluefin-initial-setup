@@ -104,6 +104,12 @@ lazyvim_starter_repo: https://github.com/LazyVim/starter.git
 # pam-u2f fica fora desta automação (veja playbooks/yubikey.yml).
 yubikey_authselect_base_features:
   - with-fingerprint
+# pam_u2f (Dakota, playbooks/dakota/yubikey.yml): módulo já na imagem e a
+# linha inserida em /etc/pam.d/{sudo,polkit-1}. "cue" mostra o aviso
+# "toque a chave"; "nouserok" deixa o PAM cair para digital/senha se o
+# usuário não tiver chaves registradas (nunca bloqueia o login).
+yubikey_pam_u2f_module: /usr/lib/x86_64-linux-gnu/security/pam_u2f.so
+yubikey_pam_u2f_line: "auth       sufficient   pam_u2f.so cue nouserok"
 yubikey_pcscd_dropin: /etc/systemd/system/pcscd.service.d/udevadm-settle.conf
 
 # Regra udev que reinicia o pcscd sempre que uma YubiKey é conectada —

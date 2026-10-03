@@ -55,7 +55,7 @@
   ansible.builtin.import_playbook: playbooks/zed.yml
   tags: [zed]
 
-- name: YubiKey no Dakota (pcscd + import da chave GPG, sem PAM/authselect) + trava do KeePassXC
+- name: YubiKey no Dakota (pam_u2f em sudo/polkit + pcscd + import da chave GPG) + trava do KeePassXC
   # tag guarda-chuva "yubikey": inclui também a tag keepassxc-yubikey-lock
   # (falha graciosamente — avisa e pula — se o KeePassXC não estiver
   # instalado); veja o cabeçalho de playbooks/yubikey.yml.
