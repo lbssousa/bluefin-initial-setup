@@ -139,3 +139,10 @@ systemd-boot: _ensure-collections
 
 systemd-boot-dakota: _ensure-collections
     {{ ap }} site-dakota.yml --tags systemd-boot
+
+# No root needed (writes ~/.config/environment.d only).
+ssh-askpass: _ensure-collections
+    ansible-playbook site.yml --tags ssh-askpass
+
+ssh-askpass-dakota: _ensure-collections
+    ansible-playbook site-dakota.yml --tags ssh-askpass
