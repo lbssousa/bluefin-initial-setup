@@ -519,6 +519,7 @@ ainda não estiver no estado desejado.
 - Automação do libfprint (goodix538d) do repositório separado
   [lbssousa/bluefin-distrobox-libfprint](https://github.com/lbssousa/bluefin-distrobox-libfprint).
 - Remapeamento do Caps Lock via kanata baseado em
+| `playbooks/systemd-boot.yml` | systemd-boot flicker-free — `loader.conf` da ESP com `timeout 0`, `console-mode keep`, `editor no` (tag `systemd-boot`); pula se o bootloader não for systemd-boot |
   [lbssousa/nix-config](https://github.com/lbssousa/nix-config)
   (`modules/system/core/localization.nix`).
 - Trava do KeePassXC ao remover a YubiKey baseada em

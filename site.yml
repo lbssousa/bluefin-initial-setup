@@ -78,3 +78,7 @@
   # (bash-completion, blesh); cada um também é selecionável isoladamente.
   ansible.builtin.import_playbook: playbooks/bash.yml
   tags: [bash]
+
+- name: systemd-boot — boot flicker-free — loader.conf sem menu e com console-mode keep
+  ansible.builtin.import_playbook: playbooks/systemd-boot.yml
+  tags: [systemd-boot]

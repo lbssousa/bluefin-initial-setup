@@ -132,3 +132,10 @@ keepassxc-browser-dakota: _ensure-collections
 
 bash-dakota: _ensure-collections
     ansible-playbook site-dakota.yml --tags bash
+
+# systemd-boot flicker-free (loader.conf na ESP).
+systemd-boot: _ensure-collections
+    {{ ap }} site.yml --tags systemd-boot
+
+systemd-boot-dakota: _ensure-collections
+    {{ ap }} site-dakota.yml --tags systemd-boot
