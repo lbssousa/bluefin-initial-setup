@@ -158,3 +158,18 @@ ssh-askpass: _ensure-collections
 
 ssh-askpass-dakota: _ensure-collections
     ansible-playbook site-dakota.yml --tags ssh-askpass
+
+# No root needed (gsettings + ~/.config/ghostty). Roda só sob pedido: muda os atalhos da sessão GNOME inteira — veja docs/omarchy-keybindings.md. Simular: just omarchy-keybindings-dry-run.
+omarchy-keybindings: _ensure-collections
+    ansible-playbook site.yml --tags omarchy-keybindings
+
+# Mostra o que mudaria, sem gravar nada.
+omarchy-keybindings-dry-run: _ensure-collections
+    ansible-playbook site.yml --tags omarchy-keybindings -e omarchy_dry_run=true
+
+# Restaura o backup dconf feito na 1ª aplicação (standalone, fora do site.yml).
+omarchy-keybindings-reset: _ensure-collections
+    ansible-playbook playbooks/omarchy-keybindings-reset.yml
+
+omarchy-keybindings-dakota: _ensure-collections
+    ansible-playbook site-dakota.yml --tags omarchy-keybindings

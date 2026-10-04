@@ -1,0 +1,38 @@
+---
+# Desfaz playbooks/omarchy-keybindings.yml: restaura o backup dconf feito na
+# 1ª execução (~/.local/share/bluefin-initial-setup/keybindings-backup/) e
+# remove o bloco do Omarchy do Ghostty. Standalone (não é importado por
+# site*.yml): `just omarchy-keybindings-reset`.
+- name: Desfazer os atalhos no estilo Omarchy
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - files/omarchy-keybindings.vars.yml
+
+  vars:
+    omarchy_state_dir: "{{ lookup('env', 'HOME') }}/.local/share/bluefin-initial-setup/keybindings-backup"
+    omarchy_ghostty_conf: "{{ lookup('env', 'HOME') }}/.config/ghostty/config.ghostty"
+
+  tasks:
+    - name: Restaurar o backup dconf
+      ansible.builtin.shell: |
+        set -eu
+        d={{ omarchy_state_dir | quote }}
+        [ -d "$d" ] || { echo "sem backup em $d" >&2; exit 1; }
+        {% for p in omarchy_backup_paths %}
+        f="$d/{{ p | regex_replace('[^A-Za-z0-9]+', '_') }}.ini"
+        dconf reset -f {{ p | quote }}
+        if [ -s "$f" ]; then dconf load {{ p | quote }} < "$f"; fi
+        {% endfor %}
+      args:
+        executable: /bin/bash
+      changed_when: true
+
+    - name: Ghostty — remover o bloco do Omarchy
+      ansible.builtin.blockinfile:
+        path: "{{ omarchy_ghostty_conf }}"
+        marker: "# {mark} omarchy-keybindings (playbooks/omarchy-keybindings.yml)"
+        state: absent
+      failed_when: false

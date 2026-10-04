@@ -89,3 +89,10 @@
 - name: ssh-askpass gráfico como padrão da sessão (PIN da YubiKey sem TTY)
   ansible.builtin.import_playbook: playbooks/ssh-askpass.yml
   tags: [ssh-askpass]
+
+- name: Atalhos de teclado no estilo Omarchy (GNOME)
+  # tag "never": muda atalhos da sessão inteira — só sob pedido explícito
+  # (--tags omarchy-keybindings / `just omarchy-keybindings`). Para
+  # desfazer, `just omarchy-keybindings-reset` (playbook standalone).
+  ansible.builtin.import_playbook: playbooks/omarchy-keybindings.yml
+  tags: [omarchy-keybindings, never]

@@ -290,6 +290,21 @@ Mais automações devem ser adicionadas a este repositório com o tempo.
 > o Ansible não mexe neles (`force: false`, veja `playbooks/bitwarden.yml`).
 > É seguro rodar os dois na mesma máquina.
 
+## Atalhos de teclado no estilo Omarchy (GNOME)
+
+`playbooks/omarchy-keybindings.yml` (tag `omarchy-keybindings`, **não roda
+por padrão** — tag `never`: `just omarchy-keybindings` /
+`just omarchy-keybindings-dakota`) redefine os atalhos da sessão GNOME para
+ficarem o mais próximos possível dos padrões do
+[Omarchy](https://github.com/omacom/omarchy) v4: fechar/tela cheia,
+workspaces `Super+1…0`, foco/troca de janelas por direção (Tiling Shell),
+atalhos de apps e painéis (`Super+Enter`, `Super+Shift+F`, `Super+Ctrl+B`…)
+e os keybinds do Ghostty. Resolve colisões (Dash to Dock, `Super+1…9`) e é
+reversível (`just omarchy-keybindings-reset`) e simulável
+(`just omarchy-keybindings-dry-run`). A comparação completa — o que foi
+mapeado e o que não tem equivalente no GNOME — está em
+[docs/omarchy-keybindings.md](docs/omarchy-keybindings.md).
+
 ## Bluefin Dakota
 
 O [Bluefin Dakota](https://docs.projectbluefin.io/dakota/) é uma base
@@ -528,6 +543,9 @@ ainda não estiver no estado desejado.
 | `playbooks/systemd-boot.yml` | systemd-boot flicker-free — `loader.conf` da ESP com `timeout 0`, `console-mode keep`, `editor no` (tag `systemd-boot`); pula se o bootloader não for systemd-boot |
 | `playbooks/ssh-askpass.yml` | ssh-askpass gráfico (gcr4-ssh-askpass) como padrão da sessão via `environment.d` — PIN da YubiKey sem TTY (tag `ssh-askpass`); pula se não houver nenhum |
 | `playbooks/bash.yml`      | Bash com cara de Fish — completion case-insensitive + history-substring-search + ble.sh (tags `bash-completion`/`blesh`) |
+| `playbooks/omarchy-keybindings.yml` | Atalhos GNOME no estilo Omarchy via gsettings + keybinds do Ghostty (tag `omarchy-keybindings`, não roda por padrão); dados em `playbooks/files/omarchy-keybindings.vars.yml`, motor idempotente em `playbooks/files/omarchy-keybindings-apply.py` |
+| `playbooks/omarchy-keybindings-reset.yml` | Restaura o backup dconf dos atalhos (standalone — `just omarchy-keybindings-reset`) |
+| `docs/omarchy-keybindings.md` | Comparação de atalhos GNOME × Omarchy e estratégia |
 | `playbooks/dakota/yubikey.yml`   | YubiKey no Dakota — `yubikey-enroll` + `yubikey-setup-pam` (pam_u2f em sudo/polkit-1) + `yubikey-setup-pcscd` + `yubikey-gpg-import`; + trava do KeePassXC (`keepassxc-yubikey-lock`) |
 | `playbooks/dakota/libfprint.yml` | libfprint no Dakota — build/install autocontidos, sem o submódulo; standalone (não importado pelo `site-dakota.yml`) |
 | `playbooks/dakota/vscode.yml`    | VSCode no Dakota — instalação via snap (tag `vscode`), falha graciosamente se o snapd não estiver disponível |
