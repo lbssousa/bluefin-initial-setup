@@ -38,6 +38,12 @@ bitwarden: _ensure-collections
 homebrew: _ensure-collections
     ansible-playbook site.yml --tags homebrew
 
+# Config do rclone + montagens systemd --user do Google Drive (segredos dos
+# clones irmãos nix-secrets/nix-keys; não faz parte de `just setup`).
+# No root needed (Homebrew + ~/.config). Funciona igual no Dakota.
+rclone-gdrive: _ensure-collections
+    ansible-playbook site.yml --tags rclone-gdrive
+
 # No root needed (Homebrew formula + ~/.local/bin + ~/.config/systemd/user).
 proton-pass: _ensure-collections
     ansible-playbook site.yml --tags proton-pass
@@ -107,6 +113,10 @@ vscode-dakota: _ensure-collections
 
 zed-dakota: _ensure-collections
     ansible-playbook site-dakota.yml --tags zed
+
+# No root needed (Homebrew + ~/.config).
+rclone-gdrive-dakota: _ensure-collections
+    ansible-playbook site-dakota.yml --tags rclone-gdrive
 
 # No root needed (Homebrew formula + ~/.local/bin + ~/.config/systemd/user).
 proton-pass-dakota: _ensure-collections

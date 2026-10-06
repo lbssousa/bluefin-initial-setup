@@ -246,6 +246,24 @@ roda por receita própria — veja
       diferente do Neovim/Zed/kanata, aqui o objetivo é garantir que as
       linhas específicas existam dentro de um arquivo que o usuário já
       tem e continua controlando o resto.
+12. **rclone — Google Drive** (`playbooks/rclone-gdrive.yml`, tag
+   `rclone-gdrive`, **não roda por padrão** — tag `never`: `--tags
+   rclone-gdrive` / `just rclone-gdrive` / `just rclone-gdrive-dakota`)
+   — gera os arquivos para montar o Google Drive com rclone, no mesmo
+   layout do `rclone.nix` do nix-config: `~/.config/rclone/rclone.conf`
+   (remote `Google Drive`, `0600`), a unit template
+   `rclone-google-drive@.service` (`systemd --user`) com um env file por
+   montagem, e os pontos `~/Google Drive/<email>/My Drive` e
+   `…/Shared with Me` (instâncias em `rclone_gdrive_instances`). O
+   `client_id`/`client_secret` OAuth são decifrados em tempo de execução
+   com `sops` a partir do clone irmão do `nix-secrets` (`secrets.yaml`),
+   usando a chave age pessoal de `~/.config/sops/age/keys.txt` ou do clone
+   do `nix-keys` já destravado com git-crypt — sobrescreva os caminhos com
+   `-e rclone_gdrive_secrets_file=…`. O token OAuth que o rclone grava é
+   preservado entre execuções; o único passo manual é `rclone config
+   reconnect "Google Drive:"`, depois do qual rodar de novo inicia as
+   montagens. `rclone`, `sops` e `age` vêm do Homebrew (sem root); o
+   `fusermount3` já é do sistema base.
 
 ### libfprint (goodix538d) — automação standalone
 

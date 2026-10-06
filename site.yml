@@ -96,3 +96,10 @@
   # desfazer, `just omarchy-keybindings-reset` (playbook standalone).
   ansible.builtin.import_playbook: playbooks/omarchy-keybindings.yml
   tags: [omarchy-keybindings, never]
+
+- name: rclone — Google Drive (My Drive + Shared with Me)
+  # tag "never": precisa do nix-secrets e do nix-keys clonados e
+  # destravados — só sob pedido explícito (--tags rclone-gdrive /
+  # `just rclone-gdrive`).
+  ansible.builtin.import_playbook: playbooks/rclone-gdrive.yml
+  tags: [rclone-gdrive, never]
