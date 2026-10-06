@@ -38,9 +38,10 @@ bitwarden: _ensure-collections
 homebrew: _ensure-collections
     ansible-playbook site.yml --tags homebrew
 
-# Config do rclone + montagens systemd --user do Google Drive (segredos dos
-# clones irmãos nix-secrets/nix-keys; não faz parte de `just setup`).
-# No root needed (Homebrew + ~/.config). Funciona igual no Dakota.
+# Config do rclone + montagens systemd --user do Google Drive. Exige
+# RCLONE_GDRIVE_CLIENT_ID e RCLONE_GDRIVE_CLIENT_SECRET no ambiente na
+# primeira execução (depois são reaproveitadas do rclone.conf). Não faz parte
+# de `just setup`. No root needed (Homebrew + ~/.config). Igual no Dakota.
 rclone-gdrive: _ensure-collections
     ansible-playbook site.yml --tags rclone-gdrive
 

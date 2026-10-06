@@ -10,16 +10,19 @@
 #
 # Pontos de montagem: ~/Google Drive/<email>/<My Drive|Shared with Me>.
 #
-# MESMO ARQUIVO usado por site.yml e site-dakota.yml — rclone, sops e age
-# vêm do Homebrew (user-level, sem root); o fusermount3 já é do sistema
+# MESMO ARQUIVO usado por site.yml e site-dakota.yml — o rclone vem
+# do Homebrew (user-level, sem root); o fusermount3 já é do sistema
 # base do Bluefin (fuse3).
 #
-# O client_id/client_secret OAuth NÃO ficam neste repositório: são
-# decifrados em tempo de execução do secrets.yaml do nix-secrets
-# (abutre/google_drive/rclone/*) com sops e a chave age pessoal (nix-keys
-# destravado com git-crypt, ou ~/.config/sops/age/keys.txt). Nem a chave
-# nem o texto claro vão para log ou para qualquer lugar além do
-# rclone.conf (0600).
+# O client_id/client_secret OAuth da API do Google NÃO ficam neste
+# repositório: você os fornece por variável de ambiente
+#
+#   RCLONE_GDRIVE_CLIENT_ID=... RCLONE_GDRIVE_CLIENT_SECRET=... just rclone-gdrive
+#
+# ou por -e rclone_gdrive_client_id=... -e rclone_gdrive_client_secret=...
+# Se não forem informados, são reaproveitados do ~/.config/rclone/rclone.conf
+# existente (então só a primeira execução precisa deles). Nunca vão para
+# log nem para qualquer lugar além do rclone.conf (0600).
 #
 # O rclone.conf é reescrito a cada execução, mas a linha `token = ` que o
 # rclone grou após o login OAuth é preservada — rodar de novo nunca força
@@ -31,9 +34,8 @@
 # Enquanto não houver token os serviços são habilitados, mas não
 # iniciados (só falhariam); rode a automação de novo após o login.
 #
-# Tag "never": precisa do nix-secrets e do nix-keys clonados e
-# destravados, então só roda sob pedido explícito (--tags rclone-gdrive /
-# `just rclone-gdrive`).
+# Tag "never": precisa das credenciais OAuth, então só roda sob pedido
+# explícito (--tags rclone-gdrive / `just rclone-gdrive`).
 #
 # Uso: ansible-playbook site.yml --tags rclone-gdrive
 - name: rclone — montagens do Google Drive
@@ -57,9 +59,9 @@
       when: not brew_bin.stat.exists
 
   tasks:
-    - name: Instalar rclone, sops e age via Homebrew
+    - name: Instalar rclone via Homebrew
       community.general.homebrew:
-        name: [rclone, sops, age]
+        name: rclone
         state: present
 
     - name: Verificar se o fusermount3 existe (fuse3 do sistema base)
@@ -71,45 +73,6 @@
       ansible.builtin.fail:
         msg: fusermount3 não encontrado em /usr/bin — o rclone mount precisa do fuse3.
       when: not rclone_gdrive_fusermount.stat.exists
-
-    - name: Localizar a chave age pessoal
-      ansible.builtin.stat:
-        path: "{{ item }}"
-      loop: "{{ rclone_gdrive_age_key_candidates }}"
-      register: rclone_gdrive_age_keys
-
-    - name: Verificar se o secrets.yaml do nix-secrets existe
-      ansible.builtin.stat:
-        path: "{{ rclone_gdrive_secrets_file }}"
-      register: rclone_gdrive_secrets_stat
-
-    - name: Falhar com instruções se a chave age ou os secrets não existirem
-      ansible.builtin.fail:
-        msg: >-
-          Preciso do secrets.yaml do nix-secrets ({{ rclone_gdrive_secrets_file }})
-          e da chave age pessoal (uma de {{ rclone_gdrive_age_key_candidates }}).
-          Clone lbssousa/nix-secrets e lbssousa/nix-keys ao lado deste
-          repositório e rode `git-crypt unlock` no nix-keys, ou passe
-          -e rclone_gdrive_secrets_file=... e coloque a chave em
-          ~/.config/sops/age/keys.txt.
-      when: >-
-        not rclone_gdrive_secrets_stat.stat.exists
-        or (rclone_gdrive_age_keys.results | selectattr('stat.exists') | list | length == 0)
-
-    - name: Decifrar as credenciais OAuth do rclone com sops
-      ansible.builtin.command:
-        argv:
-          - sops
-          - --decrypt
-          - --extract
-          - '["abutre"]["google_drive"]["rclone"]["{{ item }}"]'
-          - "{{ rclone_gdrive_secrets_file }}"
-      environment:
-        SOPS_AGE_KEY_FILE: "{{ (rclone_gdrive_age_keys.results | selectattr('stat.exists') | first).item }}"
-      loop: [client_id, client_secret]
-      register: rclone_gdrive_creds
-      changed_when: false
-      no_log: true
 
     - name: Ler o rclone.conf existente, se houver (para manter o token OAuth)
       ansible.builtin.slurp:
@@ -125,6 +88,28 @@
               | regex_findall('(?m)^token = (.*)$') | first | default('')) }}
       no_log: true
 
+    - name: Resolver as credenciais OAuth (informadas ou do rclone.conf)
+      ansible.builtin.set_fact:
+        rclone_gdrive_client_id_resolved: >-
+          {{ rclone_gdrive_client_id | default('', true)
+              or (rclone_gdrive_existing_text | regex_findall('(?m)^client_id = (.+)$') | first | default('')) }}
+        rclone_gdrive_client_secret_resolved: >-
+          {{ rclone_gdrive_client_secret | default('', true)
+              or (rclone_gdrive_existing_text | regex_findall('(?m)^client_secret = (.+)$') | first | default('')) }}
+      vars:
+        rclone_gdrive_existing_text: "{{ rclone_gdrive_existing.content | default('') | b64decode }}"
+      no_log: true
+
+    - name: Falhar se faltarem as credenciais OAuth do Google
+      ansible.builtin.fail:
+        msg: >-
+          Faltam as credenciais OAuth da API do Google. Informe-as com
+          RCLONE_GDRIVE_CLIENT_ID e RCLONE_GDRIVE_CLIENT_SECRET (variáveis
+          de ambiente) ou -e rclone_gdrive_client_id=... -e
+          rclone_gdrive_client_secret=...; só a primeira execução precisa
+          delas, depois são reaproveitadas do rclone.conf.
+      when: rclone_gdrive_client_id_resolved | length == 0 or rclone_gdrive_client_secret_resolved | length == 0
+
     - name: Criar o diretório de configuração do rclone
       ansible.builtin.file:
         path: "{{ item }}"
@@ -139,15 +124,15 @@
         state: directory
         mode: "0755"
 
-    - name: Gravar o rclone.conf (credenciais do sops, token preservado)
+    - name: Gravar o rclone.conf (credenciais OAuth, token preservado)
       ansible.builtin.template:
         src: rclone.conf.j2
         dest: "{{ rclone_gdrive_config_file }}"
         mode: "0600"
       no_log: true
       vars:
-        rclone_gdrive_client_id: "{{ rclone_gdrive_creds.results[0].stdout }}"
-        rclone_gdrive_client_secret: "{{ rclone_gdrive_creds.results[1].stdout }}"
+        rclone_gdrive_client_id: "{{ rclone_gdrive_client_id_resolved }}"
+        rclone_gdrive_client_secret: "{{ rclone_gdrive_client_secret_resolved }}"
 
     - name: Gravar o env file com o e-mail do Google Drive
       ansible.builtin.copy:

@@ -221,23 +221,15 @@ blesh_install_prefix: "{{ lookup('env', 'HOME') }}/.local"
 blesh_entry: "{{ lookup('env', 'HOME') }}/.local/share/blesh/ble.sh"
 
 # Google Drive montado via rclone (playbooks/rclone-gdrive.yml). Espelha o
-# home/users/abutre/rclone.nix do nix-config: client_id/client_secret OAuth
-# vêm do nix-secrets (sops, cifrado com age); o e-mail é dado público do
-# flake.nix do nix-secrets (abutre.googleDriveEmail).
+# home/users/abutre/rclone.nix do nix-config. O e-mail não é segredo.
 rclone_gdrive_email: lbsousajr@gmail.com
 rclone_bin: "{{ homebrew_prefix }}/bin/rclone"
 rclone_gdrive_remote: Google Drive
 rclone_gdrive_config_file: "{{ ansible_facts.env.HOME }}/.config/rclone/rclone.conf"
-# nix-secrets / nix-keys são procurados como irmãos deste repositório (o
-# layout que o install.sh do nix-config detecta sozinho). Sobrescreva com
-# -e rclone_gdrive_secrets_file=... se estiverem em outro lugar.
-rclone_gdrive_secrets_file: "{{ inventory_dir }}/../nix-secrets/secrets.yaml"
-# Vale o primeiro arquivo que existir: o primeiro é onde a ativação do Home
-# Manager do nix-config põe a chave age pessoal; o segundo é o clone do
-# nix-keys já destravado (git-crypt).
-rclone_gdrive_age_key_candidates:
-  - "{{ ansible_facts.env.HOME }}/.config/sops/age/keys.txt"
-  - "{{ inventory_dir }}/../nix-keys/sops/age/abutre/keys.txt"
+# Credenciais OAuth da API do Google: vêm do ambiente em cada execução (ou
+# de -e); vazias = reaproveita as do rclone.conf existente.
+rclone_gdrive_client_id: "{{ lookup('ansible.builtin.env', 'RCLONE_GDRIVE_CLIENT_ID') }}"
+rclone_gdrive_client_secret: "{{ lookup('ansible.builtin.env', 'RCLONE_GDRIVE_CLIENT_SECRET') }}"
 # Uma instância systemd (rclone-google-drive@<name>.service) por entrada.
 rclone_gdrive_instances:
   - name: my-drive
