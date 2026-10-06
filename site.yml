@@ -10,8 +10,9 @@
 # `--skip-tags <tag>` (ex.: máquinas sem a impressora). Veja o comentário
 # de cada playbooks/*.yml para detalhes.
 #
-# Bitwarden e Proton Pass têm tag "never": não rodam com esse comando sem
-# --tags, só sob pedido explícito (--tags bitwarden / --tags proton-pass).
+# Bitwarden, Proton Pass e a impressora têm tag "never": não rodam com esse
+# comando sem --tags, só sob pedido explícito (--tags bitwarden /
+# --tags proton-pass / --tags printer).
 #
 # O libfprint NÃO é importado aqui — é uma automação totalmente à parte
 # (só faz sentido em máquinas com o leitor Goodix 27c6:538d, e depende do
@@ -55,7 +56,7 @@
 
 - name: Impressora EPSON L4160 (driverless)
   ansible.builtin.import_playbook: playbooks/printer.yml
-  tags: [printer]
+  tags: [printer, never]
 
 - name: Neovim + LazyVim
   ansible.builtin.import_playbook: playbooks/neovim.yml

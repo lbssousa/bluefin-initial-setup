@@ -167,7 +167,7 @@ roda por receita própria — veja
    de senha no primeiro login em vez do prompt normal. A marcação só é
    aplicada na criação da conta — reexecutar o playbook não reseta a
    senha de um usuário que já a definiu.
-7. **Impressora EPSON L4160** (`playbooks/printer.yml`, tag `printer`) — cria a fila CUPS `L4160` em modo
+7. **Impressora EPSON L4160** (`playbooks/printer.yml`, tag `printer`, **não roda por padrão** — tag `never`: só `just printer` / `just printer-dakota`) — cria a fila CUPS `L4160` em modo
    *driverless* (`lpadmin -m everywhere`, suporte nativo a IPP
    Everywhere), sem instalar o driver ESC/P-R da Epson: o filtro CUPS
    dele não tem como ser alcançado pelo `cupsd` fora de `/usr`
@@ -178,8 +178,7 @@ roda por receita própria — veja
    inspirada em [lbssousa/nix-config](https://github.com/lbssousa/nix-config)
    (`modules/system/hardware/printing.nix`). Ajuste
    `printer_l4160_hostname` em `group_vars/all/main.yml` se a
-   impressora for trocada/renomeada na rede. Pule com
-   `--skip-tags printer` em máquinas sem essa impressora.
+   impressora for trocada/renomeada na rede.
 8. **Neovim + LazyVim** (`playbooks/neovim.yml`, tag `neovim`) — instala o `neovim` via Homebrew e, se
    `~/.config/nvim` ainda não existir, clona ali o
    [starter oficial do LazyVim](https://github.com/LazyVim/starter),
@@ -253,7 +252,7 @@ roda por receita própria — veja
    layout do `rclone.nix` do nix-config: `~/.config/rclone/rclone.conf`
    (remote `Google Drive`, `0600`), a unit template
    `rclone-google-drive@.service` (`systemd --user`) com um env file por
-   montagem, e os pontos `~/Google Drive/<email>/My Drive` e
+   montagem, e os pontos `~/Público/Google Drive/<email>/My Drive` e
    `…/Shared with Me` (instâncias em `rclone_gdrive_instances`). O
    `client_id`/`client_secret` OAuth da API do Google são fornecidos por
    você na primeira execução — `RCLONE_GDRIVE_CLIENT_ID=…
@@ -459,8 +458,8 @@ migrar para `ansible-vault`.
   vêm por padrão no Bluefin/uBlue; necessários apenas se a automação de
   usuários adicionais for usada.
 - CUPS (`lpadmin`, padrão no Bluefin/uBlue) e a impressora acessível na
-  rede via mDNS — necessário apenas para a automação da impressora;
-  pule com `--skip-tags printer` se não for usá-la.
+  rede via mDNS — necessário apenas para a automação da impressora
+  (`just printer`, que não faz parte do `just setup`).
 - `distrobox` (padrão no Bluefin/uBlue) — necessário apenas para a
   automação do libfprint, que é standalone (não entra em `just setup`);
   use `just libfprint` / `just libfprint-dakota` para rodá-la.

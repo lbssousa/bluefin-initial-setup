@@ -26,7 +26,7 @@ _ensure-collections: _ensure-ansible
 _ensure-submodules:
     git submodule update --init --recursive
 
-# Run the initial setup playbook. Bitwarden and Proton Pass have tag "never" in site.yml (only via `just bitwarden` / `just proton-pass`); libfprint isn't in site.yml at all — standalone, via `just libfprint`.
+# Run the initial setup playbook. Bitwarden, Proton Pass and the printer have tag "never" in site.yml (only via `just bitwarden` / `just proton-pass` / `just printer`); libfprint isn't in site.yml at all — standalone, via `just libfprint`.
 setup: _ensure-collections
     {{ ap }} site.yml
 
