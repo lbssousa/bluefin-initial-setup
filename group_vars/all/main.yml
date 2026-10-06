@@ -225,6 +225,8 @@ blesh_entry: "{{ lookup('env', 'HOME') }}/.local/share/blesh/ble.sh"
 rclone_gdrive_email: lbsousajr@gmail.com
 rclone_bin: "{{ homebrew_prefix }}/bin/rclone"
 rclone_gdrive_remote: Google Drive
+# Base dos pontos de montagem, relativa ao $HOME: <base>/<email>/<mount_dir>.
+rclone_gdrive_base_dir: Público/Google Drive
 rclone_gdrive_config_file: "{{ ansible_facts.env.HOME }}/.config/rclone/rclone.conf"
 # Credenciais OAuth da API do Google: vêm do ambiente em cada execução (ou
 # de -e); vazias = reaproveita as do rclone.conf existente.

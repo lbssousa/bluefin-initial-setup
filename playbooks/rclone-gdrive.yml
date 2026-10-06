@@ -8,7 +8,8 @@
 #   ~/.config/systemd/user/rclone-google-drive@<i>.env   MOUNT_DIR/CACHE_SLUG/EXTRA_FLAGS
 #   ~/.config/rclone/google-drive-email.env              GOOGLE_DRIVE_EMAIL
 #
-# Pontos de montagem: ~/Google Drive/<email>/<My Drive|Shared with Me>.
+# Pontos de montagem: ~/Público/Google Drive/<email>/<My Drive|Shared with Me>
+# (base configurável em rclone_gdrive_base_dir, relativa ao $HOME).
 #
 # MESMO ARQUIVO usado por site.yml e site-dakota.yml — o rclone vem
 # do Homebrew (user-level, sem root); o fusermount3 já é do sistema
@@ -137,8 +138,17 @@
     - name: Gravar o env file com o e-mail do Google Drive
       ansible.builtin.copy:
         dest: "{{ rclone_gdrive_config_file | dirname }}/google-drive-email.env"
-        content: "GOOGLE_DRIVE_EMAIL={{ rclone_gdrive_email }}\n"
+        content: |
+          GOOGLE_DRIVE_EMAIL={{ rclone_gdrive_email }}
+          GOOGLE_DRIVE_BASE={{ rclone_gdrive_base_dir }}
         mode: "0644"
+
+    - name: Criar a estrutura de pastas do Google Drive em ~/Público
+      ansible.builtin.file:
+        path: "{{ ansible_facts.env.HOME }}/{{ rclone_gdrive_base_dir }}/{{ rclone_gdrive_email }}/{{ item.mount_dir }}"
+        state: directory
+        mode: "0755"
+      loop: "{{ rclone_gdrive_instances }}"
 
     - name: Gravar os env files de cada montagem
       ansible.builtin.copy:
