@@ -165,14 +165,26 @@
       block:
         # Migração: versões anteriores colocavam o pam_u2f ANTES do
         # system-auth em sudo e polkit-1 (YubiKey antes da digital).
-        - name: Remover o bloco antigo do pam_u2f de sudo e polkit-1
-          ansible.builtin.blockinfile:
+        # No Dakota o polkit-1 costuma morar só em /usr/lib/pam.d (sem
+        # cópia em /etc/pam.d), e o blockinfile falha em arquivo
+        # inexistente — então só mexe nos que existem.
+        - name: Verificar quais arquivos PAM antigos existem em /etc/pam.d
+          ansible.builtin.stat:
             path: "/etc/pam.d/{{ item }}"
-            marker: "# {mark} yubikey pam_u2f (playbooks/dakota/yubikey.yml)"
-            state: absent
           loop:
             - sudo
             - polkit-1
+          register: yubikey_old_pam_files
+
+        - name: Remover o bloco antigo do pam_u2f de sudo e polkit-1
+          ansible.builtin.blockinfile:
+            path: "/etc/pam.d/{{ item.item }}"
+            marker: "# {mark} yubikey pam_u2f (playbooks/dakota/yubikey.yml)"
+            state: absent
+          loop: "{{ yubikey_old_pam_files.results }}"
+          loop_control:
+            label: "{{ item.item }}"
+          when: item.stat.exists
 
         - name: Adicionar pam_u2f ao system-auth, logo após o pam_fprintd
           ansible.builtin.blockinfile:
