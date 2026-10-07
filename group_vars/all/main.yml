@@ -194,7 +194,6 @@ keepassxc_native_messaging_targets:
 # por isso instalamos ali diretamente em vez de em /usr/local.
 dakota_libfprint_container_name: libfprint-build
 dakota_libfprint_distrobox_ini_file: "{{ inventory_dir }}/playbooks/files/dakota-libfprint-distrobox.ini"
-dakota_libfprint_opencv_formula: opencv@4
 dakota_libfprint_repo: https://github.com/lbssousa/libfprint.git
 # Vazio = a tag mais recente do fork (resolvida via `git ls-remote` a cada
 # execução). Para fixar, informe uma tag/branch/commit (ex.:

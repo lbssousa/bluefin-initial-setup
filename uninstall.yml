@@ -229,6 +229,8 @@
         - "{{ dakota_libfprint_usrlocal_prefix }}/share/metainfo/org.freedesktop.libfprint.metainfo.xml"
       tags: [libfprint-dakota]
 
+    # Instalações antigas vendorizavam libs do Homebrew (OpenCV & cia.) aqui;
+    # o fork não precisa mais delas, mas limpamos o que ficou para trás.
     - name: Localizar as bibliotecas de runtime do Homebrew vendorizadas para remover
       ansible.builtin.find:
         paths: "{{ dakota_libfprint_usrlocal_libdir }}"
