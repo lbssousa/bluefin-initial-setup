@@ -17,8 +17,7 @@
 #     OpenCV), então não há dependências de runtime fora do sistema —
 #     nem Homebrew, nem libs vendorizadas.
 #   - O resultado só é instalado em /usr/local (dakota_libfprint_usrlocal_prefix
-#     — no Dakota /usr/local é um symlink para ../var/usrlocal, logo
-#     gravável, como no OSTree clássico) e num drop-in systemd do
+#     — gravável no Dakota, como no OSTree clássico) e num drop-in systemd do
 #     fprintd.service em /etc — nunca no resto de /usr.
 #
 # Usage: ./run-empowered.sh ansible-playbook playbooks/dakota/libfprint.yml
@@ -115,8 +114,7 @@
     # compartilhado entre host e container, já que o $HOME do container é
     # o mesmo do host) — dá pra ler o prefix já configurado sem entrar no
     # distrobox. Necessário porque mudar dakota_libfprint_usrlocal_prefix
-    # (ex.: /var/usrlocal -> /usr/local) não
-    # invalida sozinho um builddir já configurado com o prefix antigo —
+    # não invalida sozinho um builddir já configurado com o prefix antigo —
     # sem checar isso, "ninja install" instala de novo no prefix velho.
     - name: Ler o prefix configurado no build existente (se houver)
       ansible.builtin.slurp:
@@ -171,7 +169,7 @@
 
     # ---------------------------------------------------------------------
     # 4. Instalação no host (únicos passos privilegiados, restritos a
-    #    /usr/local (symlink para /var/usrlocal), /etc/udev e um drop-in
+    #    /usr/local, /etc/udev e um drop-in
     #    systemd. O resto de /usr nunca é escrito.
     # ---------------------------------------------------------------------
     - name: Instalação no host (privilegiada)
