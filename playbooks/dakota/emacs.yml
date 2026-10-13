@@ -147,3 +147,19 @@
             marker: ";; {mark} bloco gerenciado pelo bluefin-initial-setup"
             block: |
               (load (expand-file-name "bluefin-initial-setup.el" user-emacs-directory) t)
+
+        - name: Ler a primeira linha do init.el (cookie lexical-binding)
+          ansible.builtin.command:
+            argv: [head, -n1, "{{ emacs_config_dir }}/init.el"]
+          register: dakota_emacs_init_first_line
+          changed_when: false
+
+        - name: Acrescentar o cookie lexical-binding no topo do init.el
+          # Emacs 30+ avisa na inicialização quando um .el carregado não
+          # declara lexical-binding na primeira linha. Só insere se a
+          # primeira linha não declarar nenhum (respeita um `nil` do usuário).
+          ansible.builtin.lineinfile:
+            path: "{{ emacs_config_dir }}/init.el"
+            line: ";;; init.el ---  -*- lexical-binding: t; -*-"
+            insertbefore: BOF
+          when: "'lexical-binding:' not in dakota_emacs_init_first_line.stdout"
