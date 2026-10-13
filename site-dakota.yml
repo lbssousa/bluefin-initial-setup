@@ -20,7 +20,8 @@
 #
 # O VSCode NÃO é mais instalado via `ujust`/Homebrew aqui — veja
 # playbooks/dakota/vscode.yml abaixo, que instala via snap (pressupõe
-# snapd já disponível no host; falha graciosamente se não estiver).
+# snapd já disponível no host; falha graciosamente se não estiver). O
+# Emacs segue o mesmo caminho (playbooks/dakota/emacs.yml).
 #
 # Rode só uma automação com `--tags <tag>`, ou pule uma com
 # `--skip-tags <tag>`.
@@ -47,6 +48,10 @@
 - name: VSCode no Dakota — instalação via snap
   ansible.builtin.import_playbook: playbooks/dakota/vscode.yml
   tags: [vscode]
+
+- name: Emacs no Dakota (snap) + AUCTeX, yasnippet, lsp-mode (tema classic)
+  ansible.builtin.import_playbook: playbooks/dakota/emacs.yml
+  tags: [emacs]
 
 - name: Proton Pass CLI + injeção das chaves SSH no agente ativo
   # tag "never" (como o Bitwarden acima): não roda em `ansible-playbook

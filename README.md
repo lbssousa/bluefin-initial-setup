@@ -380,6 +380,21 @@ explícito (o libfprint nem é importado por esse índice).
   automação. Se o binário `snap` não for encontrado no PATH, a
   automação avisa e pula em vez de falhar.
 
+- **Emacs** (`playbooks/dakota/emacs.yml`, tag `emacs`) — instala o GNU
+  Emacs via `snap` (confinamento `classic`, pacote `emacs`) e aplica as
+  mesmas configurações iniciais do
+  [lbssousa/omarchy-setup](https://github.com/lbssousa/omarchy-setup):
+  AUCTeX e yasnippet (GNU ELPA) e lsp-mode (MELPA), instalados via
+  `package.el` em modo batch, e o tema **classic** (de
+  [emacs-jp/replace-colorthemes](https://github.com/emacs-jp/replace-colorthemes)).
+  Sem a integração Omarchy daquele repo (sincronia de tema/fonte,
+  `emacs.service`). O `init.el` do usuário nunca é sobrescrito: a
+  configuração fica em `~/.config/emacs/bluefin-initial-setup.el`,
+  carregado por um bloco gerenciado no `init.el`. Se existir `~/.emacs`
+  ou `~/.emacs.d`, o Emacs ignora `~/.config/emacs`, e a automação
+  avisa. Mesmo pressuposto do VSCode: snapd já disponível; sem ele, avisa
+  e pula.
+
 `site-dakota.yml` **não importa** `playbooks/homebrew.yml` (tag
 `homebrew`, sem receita `homebrew-dakota` correspondente): no Dakota, a
 instalação do Zed já é gerenciada pelo `ujust` da própria imagem, então
@@ -565,9 +580,10 @@ ainda não estiver no estado desejado.
 | `playbooks/dakota/yubikey.yml`   | YubiKey no Dakota — `yubikey-enroll` + `yubikey-setup-pam` (pam_u2f em sudo/polkit-1) + `yubikey-setup-pcscd` + `yubikey-gpg-import`; + trava do KeePassXC (`keepassxc-yubikey-lock`) |
 | `playbooks/dakota/libfprint.yml` | libfprint no Dakota — build/install autocontidos, sem o submódulo; standalone (não importado pelo `site-dakota.yml`) |
 | `playbooks/dakota/vscode.yml`    | VSCode no Dakota — instalação via snap (tag `vscode`), falha graciosamente se o snapd não estiver disponível |
+| `playbooks/dakota/emacs.yml`     | Emacs no Dakota — instalação via snap + AUCTeX, yasnippet, lsp-mode e tema classic, como no omarchy-setup (tag `emacs`), falha graciosamente se o snapd não estiver disponível |
 | `playbooks/files/`        | Arquivos estáticos copiados como estão via `copy` (unidades systemd, polkit action, environment.d, script wrapper do KeePassXC-Browser, distrobox.ini do libfprint no Dakota) — compartilhado pelos playbooks acima |
 | `playbooks/templates/`    | Arquivos `.j2` renderizados via `template` (regra udev do KeePassXC-YubiKey-lock, unidade do kanata, manifesto do KeePassXC-Browser, script + unidade `systemd --user` do agente SSH do Proton Pass). Módulo `template` só busca em `templates/`, não em `files/` — por isso ficam num diretório separado (`dakota-fprintd-override.conf.j2` é a exceção: referenciado por caminho absoluto em `playbooks/dakota/libfprint.yml`, já que aquele playbook não mora em `playbooks/`) |
-| `group_vars/all/main.yml` | Variáveis públicas de todas as automações (IDs de Flatpak, nome do tap, casks, caminhos, alvos do KeePassXC-Browser, vars do libfprint, do VSCode via snap no Dakota e do Proton Pass CLI) |
+| `group_vars/all/main.yml` | Variáveis públicas de todas as automações (IDs de Flatpak, nome do tap, casks, caminhos, alvos do KeePassXC-Browser, vars do libfprint, do VSCode e do Emacs via snap no Dakota e do Proton Pass CLI) |
 | `group_vars/all/local_users.yml.example` | Template dos usuários adicionais (copie para `local_users.yml`) |
 | `group_vars/all/local_users.yml` | Dados reais dos usuários adicionais — local, fora do git    |
 | `requirements.yml`       | Collections Ansible necessárias (`community.general`)           |
@@ -593,3 +609,6 @@ ainda não estiver no estado desejado.
   (`modules/system/security/keepassxc-yubikey-lock.nix`).
 - `run-empowered.sh` e a escalação de privilégio via `run0 --empower`
   portados de [lbssousa/omarchy-setup](https://github.com/lbssousa/omarchy-setup).
+- Configuração inicial do Emacs (pacotes e tema classic) portada de
+  [lbssousa/omarchy-setup](https://github.com/lbssousa/omarchy-setup)
+  (`playbooks/emacs.yml`).

@@ -1,0 +1,149 @@
+---
+# GNU Emacs no Bluefin Dakota — instalado via snap (community.general.snap,
+# confinamento classic), com as mesmas configurações iniciais do
+# lbssousa/omarchy-setup (playbooks/emacs.yml de lá): AUCTeX, yasnippet e
+# lsp-mode (dakota_emacs_packages) e o tema "classic" (bege claro sobre
+# ardósia escura, de emacs-jp/replace-colorthemes). Sem a integração
+# Omarchy daquele repo (omarchy.el, sincronia de tema/fonte e o
+# emacs.service do pacote omarchy-emacs), que não existe aqui.
+#
+# Os pacotes Emacs são instalados com o package.el em modo batch (emacs
+# -Q: independente do init do usuário), só os que faltam. AUCTeX e
+# yasnippet vêm do GNU ELPA, lsp-mode do MELPA
+# (dakota_emacs_package_archives). O package-user-dir é fixado em
+# ~/.config/emacs/elpa, o mesmo que o Emacs usa ao iniciar.
+#
+# O init.el do usuário nunca é sobrescrito: tudo fica num
+# bluefin-initial-setup.el gerenciado ao lado dele, carregado por um bloco
+# (blockinfile) acrescentado ao init.el. Usa ~/.config/emacs — se existir
+# ~/.emacs ou ~/.emacs.d, o Emacs ignora esse diretório, e a automação
+# avisa.
+#
+# Mesmo pressuposto de playbooks/dakota/vscode.yml: o snapd já precisa
+# estar disponível e habilitado no host. Se o binário `snap` não for
+# encontrado no PATH, a automação avisa e pula em vez de falhar (um
+# ansible.builtin.fail aqui interromperia as plays seguintes de
+# site-dakota.yml para o host).
+- name: Emacs no Dakota (snap) + AUCTeX, yasnippet, lsp-mode (tema classic)
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    emacs_config_dir: "{{ lookup('env', 'HOME') }}/.config/emacs"
+
+  pre_tasks:
+    - name: Verificar se o snap está disponível (binário no PATH)
+      ansible.builtin.command: which snap
+      register: dakota_emacs_snap_bin_check
+      changed_when: false
+      failed_when: false
+      tags: [emacs]
+
+    - name: Avisar que o snap não foi encontrado (instalação do Emacs pulada)
+      ansible.builtin.debug:
+        msg: >-
+          snap não encontrado no PATH — pulando a instalação do Emacs.
+          Instale e habilite o snapd primeiro e rode de novo com --tags
+          emacs para habilitá-la.
+      when: dakota_emacs_snap_bin_check.rc != 0
+      tags: [emacs]
+
+  tasks:
+    - name: Emacs via snap + configuração inicial
+      when: dakota_emacs_snap_bin_check.rc == 0
+      tags: [emacs]
+      block:
+        - name: Instalar o Emacs via snap (confinamento classic)
+          # O snap "emacs" só é publicado em confinamento classic (precisa
+          # do sistema de arquivos do host) — snap recusa instalar sem
+          # --classic. retries/until: mesmo motivo de
+          # playbooks/dakota/vscode.yml (downloads da snap store que
+          # falham com "unexpected EOF" em conexões instáveis).
+          community.general.snap:
+            name: "{{ dakota_emacs_snap_name }}"
+            classic: true
+          become: true
+          register: dakota_emacs_snap_install
+          until: dakota_emacs_snap_install is succeeded
+          retries: 3
+          delay: 15
+
+        - name: Verificar se ~/.emacs ou ~/.emacs.d existem
+          ansible.builtin.stat:
+            path: "{{ lookup('env', 'HOME') }}/{{ item }}"
+          loop: [.emacs, .emacs.el, .emacs.d]
+          register: dakota_emacs_legacy_init
+
+        - name: Avisar que o Emacs vai ignorar ~/.config/emacs
+          ansible.builtin.debug:
+            msg: >-
+              {{ dakota_emacs_legacy_init.results | selectattr('stat.exists')
+              | map(attribute='item') | map('regex_replace', '^', '~/') | join(', ') }}
+              existe(m): o Emacs usa esse init em vez de ~/.config/emacs, e
+              a configuração gerenciada aqui não será carregada. Mova-o(s)
+              para ~/.config/emacs para usá-la.
+          when: dakota_emacs_legacy_init.results | selectattr('stat.exists') | list | length > 0
+
+        - name: Criar o diretório de configuração e o de temas
+          ansible.builtin.file:
+            path: "{{ item }}"
+            state: directory
+            mode: "0755"
+          loop:
+            - "{{ emacs_config_dir }}"
+            - "{{ emacs_config_dir }}/themes"
+
+        - name: Descobrir quais pacotes Emacs estão faltando
+          ansible.builtin.command:
+            argv:
+              - "{{ dakota_emacs_bin }}"
+              - -Q
+              - --batch
+              - --eval
+              - >-
+                (progn (require 'package)
+                (setq package-user-dir "{{ emacs_config_dir }}/elpa")
+                (package-initialize)
+                (princ (mapconcat #'symbol-name
+                (seq-remove #'package-installed-p
+                '({{ dakota_emacs_packages | join(' ') }})) " ")))
+          register: dakota_emacs_packages_check
+          changed_when: false
+
+        - name: Instalar os pacotes Emacs que faltam ({{ dakota_emacs_packages | join(', ') }})
+          ansible.builtin.command:
+            argv:
+              - "{{ dakota_emacs_bin }}"
+              - -Q
+              - --batch
+              - --eval
+              - >-
+                (progn (require 'package)
+                (setq package-user-dir "{{ emacs_config_dir }}/elpa")
+                (setq package-archives
+                '({% for a in dakota_emacs_package_archives %}("{{ a.name }}" . "{{ a.url }}") {% endfor %}))
+                (package-initialize) (package-refresh-contents)
+                (dolist (p '({{ dakota_emacs_packages_check.stdout }})) (package-install p)))
+          when: dakota_emacs_packages_check.stdout | trim | length > 0
+
+        - name: Instalar o tema classic
+          ansible.builtin.copy:
+            src: "{{ inventory_dir }}/playbooks/files/emacs-classic-theme.el"
+            dest: "{{ emacs_config_dir }}/themes/classic-theme.el"
+            mode: "0644"
+
+        - name: Instalar o bluefin-initial-setup.el gerenciado (repositórios, AUCTeX, yasnippet, lsp-mode + tema classic)
+          ansible.builtin.template:
+            src: "{{ inventory_dir }}/playbooks/templates/emacs-bluefin-initial-setup.el.j2"
+            dest: "{{ emacs_config_dir }}/bluefin-initial-setup.el"
+            mode: "0644"
+
+        - name: Carregar o bluefin-initial-setup.el a partir do init.el
+          ansible.builtin.blockinfile:
+            path: "{{ emacs_config_dir }}/init.el"
+            create: true
+            mode: "0644"
+            marker: ";; {mark} bloco gerenciado pelo bluefin-initial-setup"
+            block: |
+              (load (expand-file-name "bluefin-initial-setup.el" user-emacs-directory) t)

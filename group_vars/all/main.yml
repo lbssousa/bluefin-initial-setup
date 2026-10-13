@@ -40,6 +40,31 @@ ublue_homebrew_casks:
 # o cabeçalho de playbooks/dakota/vscode.yml.
 dakota_vscode_snap_name: code
 
+# Emacs no Bluefin Dakota — instalado via snap (playbooks/dakota/emacs.yml),
+# com as mesmas configurações iniciais do lbssousa/omarchy-setup. Pressupõe
+# snapd já disponível no host, como o VSCode acima. O snap "emacs" põe o
+# binário em /snap/bin, que pode não estar no PATH do ansible-playbook —
+# por isso o caminho completo.
+dakota_emacs_snap_name: emacs
+dakota_emacs_bin: /snap/bin/emacs
+
+# Pacotes Emacs instalados com o package.el (modo batch, só os que
+# faltam) e os repositórios de onde vêm. AUCTeX e yasnippet estão no GNU
+# ELPA; lsp-mode (e suas dependências) só no MELPA. Os mesmos repositórios
+# são configurados no bluefin-initial-setup.el gerenciado, para o
+# package.el conseguir atualizá-los.
+dakota_emacs_package_archives:
+  - name: gnu
+    url: https://elpa.gnu.org/packages/
+  - name: nongnu
+    url: https://elpa.nongnu.org/nongnu/
+  - name: melpa
+    url: https://melpa.org/packages/
+dakota_emacs_packages:
+  - auctex
+  - yasnippet
+  - lsp-mode
+
 # Proton Pass CLI — instalado via Homebrew (fórmula oficial
 # "proton-pass-cli", sem tap: formulae.brew.sh/formula/proton-pass-cli;
 # binário `pass-cli`). playbooks/proton-pass.yml (tag "never", como o

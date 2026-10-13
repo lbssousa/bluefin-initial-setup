@@ -112,6 +112,10 @@ bitwarden-dakota: _ensure-collections
 vscode-dakota: _ensure-collections
     {{ ap }} site-dakota.yml --tags vscode
 
+# Emacs via snap + AUCTeX, yasnippet, lsp-mode and the classic theme (same initial config as omarchy-setup). Needs root (snap install); assumes snapd is available.
+emacs-dakota: _ensure-collections
+    {{ ap }} site-dakota.yml --tags emacs
+
 zed-dakota: _ensure-collections
     ansible-playbook site-dakota.yml --tags zed
 

@@ -1,0 +1,53 @@
+;;; bluefin-initial-setup.el --- gerenciado pelo bluefin-initial-setup (playbooks/dakota/emacs.yml)  -*- lexical-binding: t; -*-
+;; Edições aqui são sobrescritas na próxima execução; coloque suas
+;; próprias configurações no init.el.
+
+;;; Pacotes (AUCTeX e yasnippet vêm do GNU ELPA, lsp-mode do MELPA)
+(require 'package)
+{% for a in dakota_emacs_package_archives %}
+(add-to-list 'package-archives '("{{ a.name }}" . "{{ a.url }}") t)
+{% endfor %}
+(package-initialize)
+
+;;; yasnippet: snippets em todo lugar (TAB expande)
+(when (package-installed-p 'yasnippet)
+  (yas-global-mode 1))
+
+;;; lsp-mode: instalado, mas não iniciado automaticamente (o Eglot, nativo,
+;;; continua sendo o cliente padrão); use M-x lsp.
+(when (package-installed-p 'lsp-mode)
+  (setq lsp-keymap-prefix "C-c l"))
+
+;;; AUCTeX
+(when (package-installed-p 'auctex)
+  (require 'tex-site nil t)
+  (setq TeX-auto-save t
+        TeX-parse-self t
+        TeX-PDF-mode t
+        TeX-view-program-selection '((output-pdf "xdg-open"))
+        TeX-view-program-list '(("xdg-open" "xdg-open %o")))
+  (setq-default TeX-master nil)
+  (add-hook 'LaTeX-mode-hook #'LaTeX-math-mode)
+  (add-hook 'LaTeX-mode-hook #'turn-on-reftex)
+  (add-hook 'LaTeX-mode-hook #'visual-line-mode)
+  (setq reftex-plug-into-AUCTeX t))
+
+;;; Tema classic (themes/classic-theme.el, de emacs-jp/replace-colorthemes)
+(menu-bar-mode 1)
+(when (fboundp 'tool-bar-mode) (tool-bar-mode -1))
+(when (fboundp 'scroll-bar-mode) (scroll-bar-mode -1))
+(setq inhibit-startup-screen t)
+
+(add-to-list 'custom-theme-load-path
+             (expand-file-name "themes" user-emacs-directory))
+
+(defun bluefin-initial-setup-apply-classic-theme ()
+  "Deixa `classic' como o único tema habilitado."
+  (interactive)
+  (mapc #'disable-theme custom-enabled-themes)
+  (load-theme 'classic t))
+
+(bluefin-initial-setup-apply-classic-theme)
+
+(provide 'bluefin-initial-setup)
+;;; bluefin-initial-setup.el ends here
