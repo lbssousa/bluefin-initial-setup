@@ -256,13 +256,31 @@ rclone_gdrive_config_file: "{{ ansible_facts.env.HOME }}/.config/rclone/rclone.c
 # de -e); vazias = reaproveita as do rclone.conf existente.
 rclone_gdrive_client_id: "{{ lookup('ansible.builtin.env', 'RCLONE_GDRIVE_CLIENT_ID') }}"
 rclone_gdrive_client_secret: "{{ lookup('ansible.builtin.env', 'RCLONE_GDRIVE_CLIENT_SECRET') }}"
+# Nomes das pastas de montagem por idioma, como na interface web do Google
+# Drive. O idioma vem do locale atual (LC_ALL > LC_MESSAGES > LANG, ex.:
+# pt_BR.UTF-8 -> pt); idioma sem entrada aqui (ou C/POSIX) cai no inglês.
+rclone_gdrive_mount_dir_names:
+  en:
+    my-drive: My Drive
+    shared-with-me: Shared with Me
+  pt:
+    my-drive: Meu Drive
+    shared-with-me: Compartilhados comigo
+rclone_gdrive_lang: >-
+  {{ [lookup('ansible.builtin.env', 'LC_ALL'),
+      lookup('ansible.builtin.env', 'LC_MESSAGES'),
+      lookup('ansible.builtin.env', 'LANG')]
+     | select | first | default('en') | regex_replace('[_.@].*$', '') }}
+rclone_gdrive_mount_names: >-
+  {{ rclone_gdrive_mount_dir_names[rclone_gdrive_lang]
+     | default(rclone_gdrive_mount_dir_names.en) }}
 # Uma instância systemd (rclone-google-drive@<name>.service) por entrada.
 rclone_gdrive_instances:
   - name: my-drive
-    mount_dir: My Drive
+    mount_dir: "{{ rclone_gdrive_mount_names['my-drive'] }}"
     cache_slug: google-drive
     extra_flags: ""
   - name: shared-with-me
-    mount_dir: Shared with Me
+    mount_dir: "{{ rclone_gdrive_mount_names['shared-with-me'] }}"
     cache_slug: google-drive-shared-with-me
     extra_flags: "--drive-shared-with-me"

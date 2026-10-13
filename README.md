@@ -253,7 +253,9 @@ roda por receita própria — veja
    (remote `Google Drive`, `0600`), a unit template
    `rclone-google-drive@.service` (`systemd --user`) com um env file por
    montagem, e os pontos `~/Público/Google Drive/<email>/My Drive` e
-   `…/Shared with Me` (instâncias em `rclone_gdrive_instances`). O
+   `…/Shared with Me` (instâncias em `rclone_gdrive_instances`), com os
+   nomes das pastas no idioma do locale atual — `Meu Drive` e
+   `Compartilhados comigo` em `pt_BR` (`rclone_gdrive_mount_dir_names`). O
    `client_id`/`client_secret` OAuth da API do Google são fornecidos por
    você na primeira execução — `RCLONE_GDRIVE_CLIENT_ID=…
    RCLONE_GDRIVE_CLIENT_SECRET=… just rclone-gdrive` (ou `-e

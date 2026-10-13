@@ -9,7 +9,10 @@
 #   ~/.config/rclone/google-drive-email.env              GOOGLE_DRIVE_EMAIL
 #
 # Pontos de montagem: ~/Público/Google Drive/<email>/<My Drive|Shared with Me>
-# (base configurável em rclone_gdrive_base_dir, relativa ao $HOME).
+# (base configurável em rclone_gdrive_base_dir, relativa ao $HOME). Os nomes
+# das pastas seguem o locale atual (rclone_gdrive_mount_dir_names): em
+# pt_BR, "Meu Drive" e "Compartilhados comigo". Ao trocar de idioma, as
+# pastas do nome antigo são removidas se estiverem vazias (desmontadas).
 #
 # MESMO ARQUIVO usado por site.yml e site-dakota.yml — o rclone vem
 # do Homebrew (user-level, sem root); o fusermount3 já é do sistema
@@ -181,6 +184,19 @@
         state: restarted
       loop: "{{ rclone_gdrive_instances }}"
       when: rclone_gdrive_token | length > 0
+
+    - name: Remover pastas de montagem vazias com nomes de outro idioma
+      ansible.builtin.command:
+        argv: [rmdir, "{{ ansible_facts.env.HOME }}/{{ rclone_gdrive_base_dir }}/{{ rclone_gdrive_email }}/{{ item }}"]
+      # rmdir só apaga pasta vazia e recusa ponto de montagem ativo: nunca
+      # toca em conteúdo do Drive. Ausente/não vazia = nada a fazer.
+      register: rclone_gdrive_rmdir
+      changed_when: rclone_gdrive_rmdir.rc == 0
+      failed_when: false
+      loop: >-
+        {{ rclone_gdrive_mount_dir_names.values() | map('dict2items') | flatten
+           | map(attribute='value') | unique
+           | difference(rclone_gdrive_instances | map(attribute='mount_dir')) }}
 
     - name: Orientar como concluir se ainda não há token OAuth
       ansible.builtin.debug:
