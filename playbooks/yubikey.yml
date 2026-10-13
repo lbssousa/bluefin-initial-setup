@@ -25,8 +25,8 @@
 #   just yubikey-install   (no dotfiles)
 # ou diretamente:
 #   sudo rpm-ostree install --idempotent pam-u2f
-#   brew install libfido2
-# seguido de reinicialização.
+# seguido de reinicialização. (O libfido2 já vem incluso na imagem —
+# não é preciso instalá-lo via Homebrew.)
 - name: YubiKey FIDO2/U2F + trava do KeePassXC ao remover a YubiKey
   hosts: localhost
   connection: local
@@ -54,8 +54,8 @@
           do pacote é manual e fica fora desta automação (evita
           rpm-ostree install — veja o cabeçalho de
           playbooks/yubikey.yml). Rode antes: `just yubikey-install` no
-          dotfiles, ou `sudo rpm-ostree install --idempotent pam-u2f
-          && brew install libfido2` seguido de reinicialização.
+          dotfiles, ou `sudo rpm-ostree install --idempotent pam-u2f`
+          seguido de reinicialização.
       when: >-
         pam_u2f_check.rc | default(1) != 0 or
         pamu2fcfg_check.rc | default(1) != 0

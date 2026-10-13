@@ -153,7 +153,7 @@ roda por receita própria — veja
    via `rpm-ostree install` — o que violaria a regra deste repositório
    de nunca usar rpm-ostree. Instale antes, manualmente (`just
    yubikey-install` no dotfiles, ou `rpm-ostree install pam-u2f` +
-   `brew install libfido2` + reboot). A instalação do **KeePassXC**
+   reboot; o `libfido2` já vem incluso na imagem). A instalação do **KeePassXC**
    também fica fora do escopo (mesmo raciocínio) — pressupõe-se o app
    já instalado, com a integração D-Bus habilitada (ativa por padrão em
    Ferramentas → Configurações → Geral).
