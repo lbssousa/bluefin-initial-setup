@@ -65,6 +65,12 @@ dakota_emacs_packages:
   - yasnippet
   - lsp-mode
 
+# Fonte padrão do Emacs (nome da família no fontconfig e tamanho em
+# pontos), aplicada pelo bluefin-initial-setup.el gerenciado. A Nerd Font
+# "Mono" mantém os ícones com largura de uma célula.
+dakota_emacs_font_family: JetBrainsMono Nerd Font Mono
+dakota_emacs_font_size: 14
+
 # Proton Pass CLI — instalado via Homebrew (fórmula oficial
 # "proton-pass-cli", sem tap: formulae.brew.sh/formula/proton-pass-cli;
 # binário `pass-cli`). playbooks/proton-pass.yml (tag "never", como o

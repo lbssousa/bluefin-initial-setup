@@ -38,6 +38,10 @@
 (when (fboundp 'scroll-bar-mode) (scroll-bar-mode -1))
 (setq inhibit-startup-screen t)
 
+;;; Fonte padrão: via default-frame-alist, vale também para frames criados
+;;; depois (emacsclient -c com o Emacs em modo daemon).
+(add-to-list 'default-frame-alist '(font . "{{ dakota_emacs_font_family }}-{{ dakota_emacs_font_size }}"))
+
 (add-to-list 'custom-theme-load-path
              (expand-file-name "themes" user-emacs-directory))
 

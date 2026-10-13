@@ -388,8 +388,9 @@ explícito (o libfprint nem é importado por esse índice).
   [lbssousa/omarchy-setup](https://github.com/lbssousa/omarchy-setup):
   AUCTeX e yasnippet (GNU ELPA) e lsp-mode (MELPA), instalados via
   `package.el` em modo batch, e o tema **classic** (de
-  [emacs-jp/replace-colorthemes](https://github.com/emacs-jp/replace-colorthemes)).
-  Sem a integração Omarchy daquele repo (sincronia de tema/fonte,
+  [emacs-jp/replace-colorthemes](https://github.com/emacs-jp/replace-colorthemes)),
+  com a fonte `JetBrainsMono Nerd Font Mono` 14 (`dakota_emacs_font_family`
+  e `dakota_emacs_font_size`). Sem a integração Omarchy daquele repo (sincronia de tema/fonte,
   `emacs.service`). O `init.el` do usuário nunca é sobrescrito: a
   configuração fica em `~/.config/emacs/bluefin-initial-setup.el`,
   carregado por um bloco gerenciado no `init.el`. Se existir `~/.emacs`
