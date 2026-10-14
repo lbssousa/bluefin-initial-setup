@@ -280,3 +280,61 @@
         state: restarted
       failed_when: false
       listen: restart fprintd (libfprint-dakota)
+
+- name: TeX Live + LilyPond — remover /opt/texlive, /opt/lilypond e os links em /usr/local
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: true
+
+  tasks:
+    # failed_when: false — numa instalação incompleta (sem tlpkg/) o tlmgr
+    # não roda ("Could not determine (Master) directory"); a task seguinte
+    # apaga os links remanescentes de qualquer forma.
+    - name: Remover os links do TeX Live em /usr/local (tlmgr path remove)
+      ansible.builtin.command:
+        argv: ["{{ typesetting_texlive_prefix }}/bin/tlmgr", path, remove]
+        removes: "{{ typesetting_texlive_prefix }}/bin/tlmgr"
+      failed_when: false
+      tags: [typesetting]
+
+    - name: Remover links remanescentes para o TeX Live/LilyPond em /usr/local
+      ansible.builtin.command:
+        argv:
+          - find
+          - /usr/local/bin
+          - /usr/local/share/man
+          - /usr/local/share/info
+          - (
+          - -lname
+          - "{{ typesetting_texlive_prefix }}/*"
+          - -o
+          - -lname
+          - "{{ typesetting_lilypond_prefix }}/*"
+          - )
+          - -print
+          - -delete
+      register: typesetting_uninstall_links
+      changed_when: typesetting_uninstall_links.stdout | length > 0
+      failed_when: false
+      tags: [typesetting]
+
+    - name: Remover o TeX Live, o LilyPond, o baixador e as configurações
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ typesetting_texlive_prefix }}"
+        - "{{ typesetting_lilypond_prefix }}"
+        - "{{ typesetting_texlive_downloader }}"
+        - "{{ typesetting_environment_file }}"
+        - "{{ typesetting_fontconfig_file }}"
+        - "{{ typesetting_latexmk_rc_file }}"
+      notify: atualizar o cache do fontconfig (typesetting)
+      tags: [typesetting]
+
+  handlers:
+    - name: atualizar o cache do fontconfig (typesetting)
+      ansible.builtin.command: fc-cache -f
+      changed_when: true
+      listen: atualizar o cache do fontconfig (typesetting)

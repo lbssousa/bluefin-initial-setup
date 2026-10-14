@@ -290,3 +290,52 @@ rclone_gdrive_instances:
     mount_dir: "{{ rclone_gdrive_mount_names['shared-with-me'] }}"
     cache_slug: google-drive-shared-with-me
     extra_flags: "--drive-shared-with-me"
+
+# TeX Live + LilyPond (playbooks/typesetting.yml, tag "never" — download
+# longo, só sob pedido: `just typesetting` / `just typesetting-dakota`).
+# Portado do local-typesetting/ do lbssousa/omarchy-setup (que por sua vez
+# vem do lbssousa/distrobox-typesetting): TeX Live pelo instalador de rede
+# oficial do TUG em /opt/texlive, LilyPond pelo binário oficial em
+# /opt/lilypond/<versão>, e as fontes do TeX Live registradas no
+# fontconfig — LilyPond, Inkscape & cia. as enxergam.
+#
+# "latest" instala o TeX Live do ano corrente em <prefix>/current; um ano
+# (ex.: 2025) instala o histórico em <prefix>/<ano>. scheme-full (~7 GB)
+# evita manter lista de pacotes à mão: já traz gregorio/gregoriotex,
+# musixtex etc. Para algo mais leve: scheme "minimal" + pacotes extras em
+# typesetting_texlive_packages.
+typesetting_texlive_prefix: /opt/texlive
+typesetting_texlive_release: latest
+typesetting_texlive_scheme: full
+typesetting_texlive_packages: []
+# Mesmo espelho CTAN do omarchy-setup. Vazio = mirror.ctan.org (latest)
+# ou ftp.tug.org/historic (ano fixo).
+typesetting_texlive_mirror: https://linorg.usp.br
+# Cache persistente dos pacotes baixados (vazio = desligado). Com ele, uma
+# instalação que cair no meio só baixa o que falta ao rodar de novo — veja
+# playbooks/files/texlive-cached-download.sh.
+typesetting_texlive_cache_dir: ""
+typesetting_texlive_downloader: /usr/local/libexec/bluefin-initial-setup/texlive-cached-download.sh
+# Módulos Perl que o latexindent exige e que o sistema base não traz
+# (instalados com cpanm num local::lib dentro do prefix, exportado via
+# PERL5LIB em /etc/environment.d).
+typesetting_texlive_perl_modules:
+  - YAML::Tiny
+  - File::HomeDir
+typesetting_texlive_perl_lib: "{{ typesetting_texlive_prefix }}/perl5"
+typesetting_environment_file: /etc/environment.d/60-typesetting.conf
+typesetting_fontconfig_file: /etc/fonts/conf.d/09-texlive-fonts.conf
+# RC de sistema do latexmk ($pdf_mode = 4: LuaLaTeX). É o de menor
+# precedência — o RC do usuário (~/.latexmkrc ou
+# ~/.config/latexmk/latexmkrc) e o do projeto (./.latexmkrc) o sobrepõem.
+# O Emacs do Dakota roda o latexmk sem forçar engine, para valer o que os
+# RCs definirem.
+typesetting_latexmk_rc_file: /usr/local/share/latexmk/LatexMk
+
+# "stable" = última versão estável (minor par: 2.24, 2.26...), resolvida
+# pelas releases do GitLab do LilyPond; "latest" = a mais recente, mesmo
+# de desenvolvimento (minor ímpar — era o padrão do omarchy-setup); ou uma
+# versão exata (ex.: 2.26.0). Versões anteriores em /opt/lilypond são
+# removidas ao trocar.
+typesetting_lilypond_prefix: /opt/lilypond
+typesetting_lilypond_version: stable

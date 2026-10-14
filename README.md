@@ -264,6 +264,34 @@ roda por receita própria — veja
    reconnect "Google Drive:"`, depois do qual rodar de novo inicia as
    montagens. `rclone` vem do Homebrew (sem root); o
    `fusermount3` já é do sistema base.
+13. **TeX Live + LilyPond** (`playbooks/typesetting.yml`, tag
+   `typesetting`) — **DESABILITADO**: o import está comentado em
+   `site.yml`/`site-dakota.yml`, assim como as receitas `just
+   typesetting*`. TeX Live e LilyPond agora vêm do container distrobox
+   `typesetting`
+   ([lbssousa/distrobox-typesetting](https://github.com/lbssousa/distrobox-typesetting)),
+   com os binários exportados para `~/.local/bin` (`distrobox-export
+   --bin`). O que segue descreve o playbook, mantido para referência —
+   portado do `local-typesetting/` do
+   [lbssousa/omarchy-setup](https://github.com/lbssousa/omarchy-setup),
+   sem containers e sem gerenciador de pacotes. O **TeX Live** vem do
+   instalador de rede oficial do TUG e fica em `/opt/texlive/current`, com
+   `scheme-full` por padrão (~7 GB, que já traz `gregorio`/`gregoriotex` e
+   `musixtex`). Os binários, man e info são linkados em `/usr/local` por
+   `tlmgr path add`. O **LilyPond** usa o binário oficial (x86_64) e fica
+   em `/opt/lilypond/<versão>`; o padrão é a última versão estável
+   (`typesetting_lilypond_version: stable`). As **fontes do TeX Live**
+   entram no fontconfig por `/etc/fonts/conf.d/09-texlive-fonts.conf`, e
+   LilyPond, Inkscape & cia. passam a enxergá-las. Os módulos Perl do
+   `latexindent` (`YAML::Tiny`, `File::HomeDir`) são instalados via
+   `cpanm` num local::lib em `/opt/texlive/perl5`, exportado por
+   `PERL5LIB` em `/etc/environment.d/60-typesetting.conf` (vale após novo
+   login). Rodar de novo atualiza: `tlmgr update --self --all` e a versão
+   mais nova do LilyPond, removendo a anterior. Downloads com retry e
+   resume; cache persistente opcional em `typesetting_texlive_cache_dir`.
+   O progresso da instalação do TeX Live fica em
+   `/opt/texlive/install-tl.log`. Desfazer: `uninstall.yml --tags
+   typesetting`.
 
 ### libfprint (goodix538d) — automação standalone
 
@@ -581,12 +609,13 @@ ainda não estiver no estado desejado.
 | `playbooks/omarchy-keybindings-reset.yml` | Restaura o backup dconf dos atalhos (standalone — `just omarchy-keybindings-reset`) |
 | `docs/omarchy-keybindings.md` | Comparação de atalhos GNOME × Omarchy e estratégia |
 | `playbooks/dakota/yubikey.yml`   | YubiKey no Dakota — `yubikey-enroll` + `yubikey-setup-pam` (pam_u2f em sudo/polkit-1) + `yubikey-setup-pcscd` + `yubikey-gpg-import`; + trava do KeePassXC (`keepassxc-yubikey-lock`) |
+| `playbooks/typesetting.yml` | TeX Live + LilyPond em `/opt`, fontes do TeX Live no fontconfig, como o `local-typesetting/` do omarchy-setup (tag `typesetting`; **desabilitado** — o import está comentado nos `site*.yml`) |
 | `playbooks/dakota/libfprint.yml` | libfprint no Dakota — build/install autocontidos, sem o submódulo; standalone (não importado pelo `site-dakota.yml`) |
 | `playbooks/dakota/vscode.yml`    | VSCode no Dakota — instalação via snap (tag `vscode`), falha graciosamente se o snapd não estiver disponível |
 | `playbooks/dakota/emacs.yml`     | Emacs no Dakota — instalação via snap + AUCTeX, yasnippet, lsp-mode e tema classic, como no omarchy-setup (tag `emacs`), falha graciosamente se o snapd não estiver disponível |
 | `playbooks/files/`        | Arquivos estáticos copiados como estão via `copy` (unidades systemd, polkit action, environment.d, script wrapper do KeePassXC-Browser, distrobox.ini do libfprint no Dakota) — compartilhado pelos playbooks acima |
 | `playbooks/templates/`    | Arquivos `.j2` renderizados via `template` (regra udev do KeePassXC-YubiKey-lock, unidade do kanata, manifesto do KeePassXC-Browser, script + unidade `systemd --user` do agente SSH do Proton Pass). Módulo `template` só busca em `templates/`, não em `files/` — por isso ficam num diretório separado (`dakota-fprintd-override.conf.j2` é a exceção: referenciado por caminho absoluto em `playbooks/dakota/libfprint.yml`, já que aquele playbook não mora em `playbooks/`) |
-| `group_vars/all/main.yml` | Variáveis públicas de todas as automações (IDs de Flatpak, nome do tap, casks, caminhos, alvos do KeePassXC-Browser, vars do libfprint, do VSCode e do Emacs via snap no Dakota e do Proton Pass CLI) |
+| `group_vars/all/main.yml` | Variáveis públicas de todas as automações (IDs de Flatpak, nome do tap, casks, caminhos, alvos do KeePassXC-Browser, vars do libfprint, do VSCode e do Emacs via snap no Dakota, do Proton Pass CLI e do TeX Live/LilyPond) |
 | `group_vars/all/local_users.yml.example` | Template dos usuários adicionais (copie para `local_users.yml`) |
 | `group_vars/all/local_users.yml` | Dados reais dos usuários adicionais — local, fora do git    |
 | `requirements.yml`       | Collections Ansible necessárias (`community.general`)           |
@@ -615,3 +644,8 @@ ainda não estiver no estado desejado.
 - Configuração inicial do Emacs (pacotes e tema classic) portada de
   [lbssousa/omarchy-setup](https://github.com/lbssousa/omarchy-setup)
   (`playbooks/emacs.yml`).
+- Instalação do TeX Live e do LilyPond com integração de fontes portada
+  do `local-typesetting/` de
+  [lbssousa/omarchy-setup](https://github.com/lbssousa/omarchy-setup)
+  (por sua vez adaptado de
+  [lbssousa/distrobox-typesetting](https://github.com/lbssousa/distrobox-typesetting)).

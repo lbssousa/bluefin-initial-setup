@@ -1,0 +1,441 @@
+---
+# TeX Live + LilyPond direto no host (sem containers), com as fontes do
+# TeX Live registradas no fontconfig — portado do local-typesetting/ do
+# lbssousa/omarchy-setup (scripts install-texlive.sh, install-lilypond.sh
+# e configure-fonts.sh, por sua vez adaptados do
+# lbssousa/distrobox-typesetting), trocando os scripts shell e o
+# gerenciador de pacotes do Arch por tarefas Ansible:
+#
+#   - TeX Live: instalador de rede oficial do TUG (install-tl), perfil
+#     não interativo, em {{ typesetting_texlive_prefix }}/current
+#     (scheme-full por padrão). Binários, man e info linkados em
+#     /usr/local por `tlmgr path add`. Rodar de novo atualiza tudo com
+#     `tlmgr update --self --all` em vez de reinstalar.
+#   - LilyPond: binário oficial pré-compilado (x86_64 glibc) em
+#     {{ typesetting_lilypond_prefix }}/<versão>, binários linkados em
+#     /usr/local/bin. Rodar de novo instala a versão mais nova, se houver.
+#   - Fontes: as do TeX Live (opentype/truetype/type1) entram no
+#     fontconfig por /etc/fonts/conf.d/09-texlive-fonts.conf, então
+#     LilyPond, Inkscape, LibreOffice & cia. podem usá-las.
+#   - latexmk: RC de sistema em {{ typesetting_latexmk_rc_file }} com
+#     $pdf_mode = 4 (LuaLaTeX), sobreposto por ~/.latexmkrc e pelo
+#     .latexmkrc do projeto.
+#   - latexindent: os módulos Perl que ele exige não vêm no sistema base
+#     (e não há gerenciador de pacotes no Dakota/Atomic), então vão para
+#     um local::lib dentro do prefix via cpanm, exportado na sessão por
+#     PERL5LIB (/etc/environment.d — vale após novo login).
+#
+# Fica de fora o build do Gregorio a partir do fork lbssousa/gregorio: o
+# scheme-full já traz o `gregorio` e o gregoriotex do próprio TeX Live.
+#
+# Tudo fica em /opt (/var/opt) e /usr/local (/var/usrlocal) — graváveis
+# tanto no Fedora Atomic quanto no Dakota. MESMO ARQUIVO usado por
+# site.yml e site-dakota.yml. Só depende de ferramentas do sistema base:
+# perl, curl, tar, xz, make e fc-cache.
+#
+# Tag "never": download de vários GB e instalação longa (a do TeX Live
+# registra o progresso em {{ typesetting_texlive_prefix }}/install-tl.log)
+# — só sob pedido explícito.
+#
+# Desfazer: ./run-empowered.sh ansible-playbook uninstall.yml --tags typesetting
+#
+# Uso: ./run-empowered.sh ansible-playbook site.yml --tags typesetting
+# (ou `just typesetting` / `just typesetting-dakota`)
+- name: TeX Live + LilyPond (fontes do TeX Live no fontconfig)
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  become: true
+  tags: [typesetting]
+
+  vars:
+    typesetting_texdir: >-
+      {{ typesetting_texlive_prefix }}/{{ 'current' if typesetting_texlive_release == 'latest'
+         else typesetting_texlive_release }}
+    # O espelho só serve o release corrente; anos anteriores vêm do
+    # arquivo histórico do TUG.
+    typesetting_tlnet_url: >-
+      {{ (typesetting_texlive_mirror | regex_replace('/$', '')) ~ '/CTAN/systems/texlive/tlnet'
+         if typesetting_texlive_release == 'latest' and typesetting_texlive_mirror
+         else 'https://mirror.ctan.org/systems/texlive/tlnet'
+         if typesetting_texlive_release == 'latest'
+         else 'https://ftp.tug.org/texlive/historic/' ~ typesetting_texlive_release ~ '/tlnet' }}
+    # Todo download do install-tl e do tlmgr passa pelo baixador com
+    # retry/resume (e cache opcional) — veja texlive-cached-download.sh.
+    typesetting_texlive_env:
+      TL_DOWNLOAD_PROGRAM: "{{ typesetting_texlive_downloader }}"
+      TL_DOWNLOAD_ARGS: "--"
+      TEXLIVE_CACHE_DIR: "{{ typesetting_texlive_cache_dir }}"
+
+  pre_tasks:
+    - name: Verificar as ferramentas do sistema base necessárias
+      ansible.builtin.shell: command -v {{ item }}
+      loop: [perl, curl, tar, xz, make, fc-cache]
+      register: typesetting_tools
+      changed_when: false
+      failed_when: false
+
+    - name: Falhar se faltar alguma ferramenta
+      ansible.builtin.fail:
+        msg: >-
+          Não encontrado(s) no PATH:
+          {{ typesetting_tools.results | rejectattr('rc', 'equalto', 0)
+             | map(attribute='item') | join(', ') }}.
+      when: typesetting_tools.results | rejectattr('rc', 'equalto', 0) | list | length > 0
+
+    - name: Falhar se a arquitetura não tiver binário oficial do LilyPond
+      ansible.builtin.fail:
+        msg: >-
+          O LilyPond só publica binário pré-compilado para x86_64 (esta
+          máquina é {{ ansible_facts.architecture }}).
+      when: ansible_facts.architecture != 'x86_64'
+
+  tasks:
+    # ---------------------------------------------------------------------
+    # TeX Live
+    # ---------------------------------------------------------------------
+    - name: Instalar o baixador com retry/cache do TeX Live
+      block:
+        - name: Criar o diretório do baixador
+          ansible.builtin.file:
+            path: "{{ typesetting_texlive_downloader | dirname }}"
+            state: directory
+            mode: "0755"
+
+        - name: Copiar o texlive-cached-download.sh
+          ansible.builtin.copy:
+            src: "{{ inventory_dir }}/playbooks/files/texlive-cached-download.sh"
+            dest: "{{ typesetting_texlive_downloader }}"
+            mode: "0755"
+
+        - name: Criar o diretório do cache de downloads
+          ansible.builtin.file:
+            path: "{{ typesetting_texlive_cache_dir }}"
+            state: directory
+            mode: "0755"
+          when: typesetting_texlive_cache_dir | length > 0
+
+    # {{ typesetting_texlive_prefix }}/bin só é criado depois de uma
+    # instalação completa: se o install-tl cair no meio, a próxima
+    # execução instala de novo em vez de tentar atualizar.
+    - name: Verificar se o TeX Live já está instalado
+      ansible.builtin.stat:
+        path: "{{ typesetting_texlive_prefix }}/bin"
+      register: typesetting_texlive_bin_link
+
+    - name: Instalar o TeX Live (scheme-{{ typesetting_texlive_scheme }})
+      when: >-
+        not typesetting_texlive_bin_link.stat.exists
+        or not typesetting_texlive_bin_link.stat.lnk_target | default('') is match(typesetting_texdir ~ '/')
+      block:
+        - name: Criar o diretório temporário do instalador
+          ansible.builtin.tempfile:
+            state: directory
+            suffix: install-tl
+          register: typesetting_install_tl_dir
+
+        - name: Baixar o instalador do TeX Live
+          ansible.builtin.command:
+            argv:
+              - "{{ typesetting_texlive_downloader }}"
+              - "{{ typesetting_install_tl_dir.path }}/install-tl-unx.tar.gz"
+              - "{{ typesetting_tlnet_url }}/install-tl-unx.tar.gz"
+          changed_when: true
+
+        - name: Extrair o instalador
+          ansible.builtin.unarchive:
+            src: "{{ typesetting_install_tl_dir.path }}/install-tl-unx.tar.gz"
+            dest: "{{ typesetting_install_tl_dir.path }}"
+            remote_src: true
+            extra_opts: [--strip-components=1]
+
+        - name: Gravar o perfil de instalação não interativa
+          ansible.builtin.copy:
+            dest: "{{ typesetting_install_tl_dir.path }}/texlive.profile"
+            mode: "0644"
+            content: |
+              selected_scheme scheme-{{ typesetting_texlive_scheme }}
+              TEXDIR {{ typesetting_texdir }}
+              TEXMFLOCAL {{ typesetting_texlive_prefix }}/texmf-local
+              TEXMFSYSVAR {{ typesetting_texdir }}/texmf-var
+              TEXMFSYSCONFIG {{ typesetting_texdir }}/texmf-config
+              TEXMFVAR ~/.texlive/texmf-var
+              TEXMFCONFIG ~/.texlive/texmf-config
+              TEXMFHOME ~/texmf
+              instopt_adjustpath 0
+              instopt_adjustrepo 1
+              instopt_letter 0
+              instopt_portable 0
+              instopt_write18_restricted 1
+              tlpdbopt_autobackup 0
+              tlpdbopt_create_formats 1
+              tlpdbopt_install_docfiles 1
+              tlpdbopt_install_srcfiles 1
+              tlpdbopt_post_code 1
+              tlpdbopt_sys_bin /usr/local/bin
+              tlpdbopt_sys_info /usr/local/share/info
+              tlpdbopt_sys_man /usr/local/share/man
+
+        - name: Criar o prefix do TeX Live
+          ansible.builtin.file:
+            path: "{{ typesetting_texlive_prefix }}"
+            state: directory
+            mode: "0755"
+
+        - name: Rodar o install-tl (longo — progresso em {{ typesetting_texlive_prefix }}/install-tl.log)
+          ansible.builtin.command:
+            argv:
+              - "{{ typesetting_install_tl_dir.path }}/install-tl"
+              - --profile={{ typesetting_install_tl_dir.path }}/texlive.profile
+              - --location={{ typesetting_tlnet_url }}
+              - --logfile={{ typesetting_texlive_prefix }}/install-tl.log
+              - --no-interaction
+          environment: "{{ typesetting_texlive_env }}"
+          changed_when: true
+          notify: atualizar o cache do fontconfig
+
+        - name: Localizar o diretório de binários da arquitetura
+          ansible.builtin.find:
+            paths: "{{ typesetting_texdir }}/bin"
+            file_type: directory
+          register: typesetting_texlive_arch_dirs
+
+        - name: Apontar {{ typesetting_texlive_prefix }}/bin para os binários instalados
+          ansible.builtin.file:
+            src: "{{ typesetting_texlive_arch_dirs.files[0].path }}"
+            dest: "{{ typesetting_texlive_prefix }}/bin"
+            state: link
+            force: true
+      always:
+        - name: Remover o diretório temporário do instalador
+          ansible.builtin.file:
+            path: "{{ typesetting_install_tl_dir.path }}"
+            state: absent
+          when: typesetting_install_tl_dir.path is defined
+
+    - name: Atualizar o TeX Live (tlmgr update --self --all)
+      ansible.builtin.command:
+        argv: ["{{ typesetting_texlive_prefix }}/bin/tlmgr", update, --self, --all]
+      environment: "{{ typesetting_texlive_env }}"
+      register: typesetting_tlmgr_update
+      changed_when: typesetting_tlmgr_update.stdout is search('\] (update|auto-install|remove):')
+      when: typesetting_texlive_bin_link.stat.exists
+      notify: atualizar o cache do fontconfig
+
+    - name: Instalar os pacotes TeX Live extras
+      ansible.builtin.command:
+        argv: ["{{ typesetting_texlive_prefix }}/bin/tlmgr", install, "{{ item }}"]
+      loop: "{{ typesetting_texlive_packages }}"
+      environment: "{{ typesetting_texlive_env }}"
+      register: typesetting_tlmgr_install
+      changed_when: typesetting_tlmgr_install.stdout is search('\] install:')
+      notify: atualizar o cache do fontconfig
+
+    - name: Linkar binários, man e info do TeX Live em /usr/local (tlmgr path add)
+      # Só cria o que falta e nunca sobrescreve o que não é do TeX Live.
+      ansible.builtin.command:
+        argv: ["{{ typesetting_texlive_prefix }}/bin/tlmgr", path, add]
+      changed_when: false
+
+    - name: Podar entradas do cache de downloads sem uso há 30 dias
+      when: typesetting_texlive_cache_dir | length > 0
+      block:
+        - name: Localizar entradas antigas do cache
+          ansible.builtin.find:
+            paths: "{{ typesetting_texlive_cache_dir }}"
+            recurse: true
+            age: 30d
+          register: typesetting_cache_stale
+
+        - name: Remover entradas antigas do cache
+          ansible.builtin.file:
+            path: "{{ item.path }}"
+            state: absent
+          loop: "{{ typesetting_cache_stale.files }}"
+
+    # ---------------------------------------------------------------------
+    # latexmk: LuaLaTeX por padrão
+    # ---------------------------------------------------------------------
+    - name: Criar o diretório do RC de sistema do latexmk
+      ansible.builtin.file:
+        path: "{{ typesetting_latexmk_rc_file | dirname }}"
+        state: directory
+        mode: "0755"
+
+    - name: Usar o LuaLaTeX por padrão no latexmk (RC de sistema)
+      # De menor precedência: ~/.latexmkrc, ~/.config/latexmk/latexmkrc e
+      # o ./.latexmkrc do projeto o sobrepõem.
+      ansible.builtin.copy:
+        dest: "{{ typesetting_latexmk_rc_file }}"
+        mode: "0644"
+        content: |
+          # Gerenciado pelo bluefin-initial-setup (playbooks/typesetting.yml).
+          # Padrão de sistema: PDF via LuaLaTeX. Para outra engine, defina
+          # $pdf_mode no ~/.latexmkrc ou no .latexmkrc do projeto
+          # (1 = pdflatex, 4 = lualatex, 5 = xelatex).
+          $pdf_mode = 4;
+
+    # ---------------------------------------------------------------------
+    # Dependências Perl do latexindent
+    # ---------------------------------------------------------------------
+    - name: Verificar os módulos Perl do latexindent
+      ansible.builtin.command:
+        argv: >-
+          {{ ['perl', '-I' ~ typesetting_texlive_perl_lib ~ '/lib/perl5']
+             + typesetting_texlive_perl_modules | map('regex_replace', '^', '-M') | list
+             + ['-e', '1'] }}
+      register: typesetting_perl_modules_check
+      changed_when: false
+      failed_when: false
+
+    - name: Instalar os módulos Perl do latexindent via cpanm ({{ typesetting_texlive_perl_modules | join(', ') }})
+      ansible.builtin.shell: >-
+        set -o pipefail;
+        curl -fsSL https://cpanmin.us
+        | perl - --notest -L {{ typesetting_texlive_perl_lib | quote }}
+        {{ typesetting_texlive_perl_modules | map('quote') | join(' ') }}
+      args:
+        executable: /bin/bash
+      environment:
+        PERL_CPANM_HOME: "{{ typesetting_texlive_perl_lib }}/.cpanm"
+      when: typesetting_perl_modules_check.rc != 0
+
+    - name: Remover o diretório de trabalho do cpanm
+      ansible.builtin.file:
+        path: "{{ typesetting_texlive_perl_lib }}/.cpanm"
+        state: absent
+
+    - name: Criar /etc/environment.d
+      ansible.builtin.file:
+        path: "{{ typesetting_environment_file | dirname }}"
+        state: directory
+        mode: "0755"
+
+    - name: Exportar o local::lib Perl na sessão (PERL5LIB)
+      ansible.builtin.copy:
+        dest: "{{ typesetting_environment_file }}"
+        mode: "0644"
+        content: |
+          # Gerenciado pelo bluefin-initial-setup (playbooks/typesetting.yml):
+          # módulos Perl do latexindent, fora do sistema base.
+          PERL5LIB={{ typesetting_texlive_perl_lib }}/lib/perl5${PERL5LIB:+:$PERL5LIB}
+
+    # ---------------------------------------------------------------------
+    # LilyPond
+    # ---------------------------------------------------------------------
+    - name: Consultar as releases do LilyPond no GitLab
+      ansible.builtin.uri:
+        url: https://gitlab.com/api/v4/projects/lilypond%2Flilypond/releases?per_page=100
+        return_content: true
+      register: typesetting_lilypond_releases
+      when: typesetting_lilypond_version in ['stable', 'latest']
+
+    - name: Resolver a versão do LilyPond
+      ansible.builtin.set_fact:
+        typesetting_lilypond_resolved: >-
+          {{ typesetting_lilypond_version
+             if typesetting_lilypond_version not in ['stable', 'latest']
+             else (typesetting_lilypond_releases.json | map(attribute='tag_name')
+                   | select('match', '^v\d+\.\d*[02468]\.\d+$'
+                            if typesetting_lilypond_version == 'stable' else '^v')
+                   | first | regex_replace('^v', '')) }}
+
+    - name: Instalar o LilyPond {{ typesetting_lilypond_resolved }}
+      vars:
+        typesetting_lilypond_dir: "{{ typesetting_lilypond_prefix }}/{{ typesetting_lilypond_resolved }}"
+      block:
+        - name: Criar o diretório do LilyPond {{ typesetting_lilypond_resolved }}
+          ansible.builtin.file:
+            path: "{{ typesetting_lilypond_dir }}"
+            state: directory
+            mode: "0755"
+
+        - name: Baixar e extrair o binário oficial do LilyPond
+          ansible.builtin.unarchive:
+            src: >-
+              https://gitlab.com/lilypond/lilypond/-/releases/v{{ typesetting_lilypond_resolved
+              }}/downloads/lilypond-{{ typesetting_lilypond_resolved }}-linux-x86_64.tar.gz
+            dest: "{{ typesetting_lilypond_dir }}"
+            remote_src: true
+            extra_opts: [--strip-components=1]
+            creates: "{{ typesetting_lilypond_dir }}/bin/lilypond"
+
+        - name: Localizar os binários do LilyPond
+          ansible.builtin.find:
+            paths: "{{ typesetting_lilypond_dir }}/bin"
+            file_type: any
+          register: typesetting_lilypond_bins
+
+        - name: Linkar os binários do LilyPond em /usr/local/bin
+          ansible.builtin.file:
+            src: "{{ item.path }}"
+            dest: "/usr/local/bin/{{ item.path | basename }}"
+            state: link
+            force: true
+          loop: "{{ typesetting_lilypond_bins.files }}"
+          loop_control:
+            label: "{{ item.path | basename }}"
+
+        - name: Remover links de versões anteriores do LilyPond em /usr/local/bin
+          ansible.builtin.command:
+            argv:
+              - find
+              - /usr/local/bin
+              - -maxdepth
+              - "1"
+              - -lname
+              - "{{ typesetting_lilypond_prefix }}/*"
+              - "!"
+              - -lname
+              - "{{ typesetting_lilypond_dir }}/*"
+              - -print
+              - -delete
+          register: typesetting_lilypond_stale_links
+          changed_when: typesetting_lilypond_stale_links.stdout | length > 0
+
+        - name: Localizar versões anteriores do LilyPond
+          ansible.builtin.find:
+            paths: "{{ typesetting_lilypond_prefix }}"
+            file_type: directory
+            excludes: ["{{ typesetting_lilypond_resolved }}"]
+          register: typesetting_lilypond_old
+
+        - name: Remover versões anteriores do LilyPond
+          ansible.builtin.file:
+            path: "{{ item.path }}"
+            state: absent
+          loop: "{{ typesetting_lilypond_old.files }}"
+          loop_control:
+            label: "{{ item.path }}"
+
+    # ---------------------------------------------------------------------
+    # Fontes do TeX Live no fontconfig
+    # ---------------------------------------------------------------------
+    - name: Registrar as fontes do TeX Live no fontconfig
+      ansible.builtin.copy:
+        dest: "{{ typesetting_fontconfig_file }}"
+        mode: "0644"
+        content: |
+          <?xml version="1.0"?>
+          <!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
+          <!-- Gerenciado pelo bluefin-initial-setup (playbooks/typesetting.yml) -->
+          <fontconfig>
+            <dir>{{ typesetting_texdir }}/texmf-dist/fonts/opentype</dir>
+            <dir>{{ typesetting_texdir }}/texmf-dist/fonts/truetype</dir>
+            <dir>{{ typesetting_texdir }}/texmf-dist/fonts/type1</dir>
+          </fontconfig>
+      notify: atualizar o cache do fontconfig
+
+  post_tasks:
+    - name: Lembrar do novo login (PERL5LIB do latexindent)
+      ansible.builtin.debug:
+        msg: >-
+          TeX Live em {{ typesetting_texdir }} e LilyPond
+          {{ typesetting_lilypond_resolved }} em {{ typesetting_lilypond_prefix }},
+          com binários em /usr/local/bin. O latexindent só enxerga os módulos
+          Perl depois de um novo login (PERL5LIB via /etc/environment.d).
+
+  handlers:
+    - name: atualizar o cache do fontconfig
+      ansible.builtin.command: fc-cache -f
+      changed_when: true

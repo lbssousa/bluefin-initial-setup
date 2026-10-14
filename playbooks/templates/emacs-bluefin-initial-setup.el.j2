@@ -30,7 +30,25 @@
   (add-hook 'LaTeX-mode-hook #'LaTeX-math-mode)
   (add-hook 'LaTeX-mode-hook #'turn-on-reftex)
   (add-hook 'LaTeX-mode-hook #'visual-line-mode)
-  (setq reftex-plug-into-AUCTeX t))
+  (setq reftex-plug-into-AUCTeX t)
+
+  ;; LuaLaTeX como engine padrão (comandos "LaTeX", preview-latex etc.).
+  (setq-default TeX-engine 'luatex)
+
+  ;; latexmk como comando padrão do C-c C-c. O "LaTeXMk" nativo do AUCTeX
+  ;; passa a engine na linha de comando (-pdflua, -pdf...), o que
+  ;; sobrepõe o $pdf_mode do .latexmkrc; esta versão não passa nenhuma, e
+  ;; a engine vem dos RCs do latexmk: o do projeto (./.latexmkrc), o do
+  ;; usuário (~/.latexmkrc ou ~/.config/latexmk/latexmkrc) ou, na falta
+  ;; deles, o de sistema que o playbooks/typesetting.yml instala
+  ;; ({{ typesetting_latexmk_rc_file }}, $pdf_mode = 4: LuaLaTeX).
+  (with-eval-after-load 'tex
+    (setf (alist-get "LaTeXMk" TeX-command-list nil nil #'equal)
+          '("latexmk %(file-line-error) %(output-dir) %`%(extraopts) %S%(mode)%' %t"
+            TeX-run-TeX nil (LaTeX-mode docTeX-mode)
+            :help "Run latexmk (engine definida pelo .latexmkrc)")))
+  (add-hook 'LaTeX-mode-hook
+            (lambda () (setq TeX-command-default "LaTeXMk"))))
 
 ;;; Tema classic (themes/classic-theme.el, de emacs-jp/replace-colorthemes)
 (menu-bar-mode 1)

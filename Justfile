@@ -45,6 +45,10 @@ homebrew: _ensure-collections
 rclone-gdrive: _ensure-collections
     ansible-playbook site.yml --tags rclone-gdrive
 
+# TeX Live + LilyPond em /opt — DESABILITADO (agora vêm do container distrobox "typesetting"; ver site.yml).
+# typesetting: _ensure-collections
+#     {{ ap }} site.yml --tags typesetting
+
 # No root needed (Homebrew formula + ~/.local/bin + ~/.config/systemd/user).
 proton-pass: _ensure-collections
     ansible-playbook site.yml --tags proton-pass
@@ -122,6 +126,9 @@ zed-dakota: _ensure-collections
 # No root needed (Homebrew + ~/.config).
 rclone-gdrive-dakota: _ensure-collections
     ansible-playbook site-dakota.yml --tags rclone-gdrive
+
+# typesetting-dakota: _ensure-collections
+#     {{ ap }} site-dakota.yml --tags typesetting
 
 # No root needed (Homebrew formula + ~/.local/bin + ~/.config/systemd/user).
 proton-pass-dakota: _ensure-collections

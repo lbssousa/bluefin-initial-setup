@@ -104,3 +104,12 @@
   # `just rclone-gdrive`).
   ansible.builtin.import_playbook: playbooks/rclone-gdrive.yml
   tags: [rclone-gdrive, never]
+
+# TeX Live + LilyPond: DESABILITADO. Agora vêm do container distrobox
+# "typesetting" (lbssousa/distrobox-typesetting), com os binários exportados
+# para ~/.local/bin via distrobox-export. O playbook continua em
+# playbooks/typesetting.yml; para reativar a instalação local em /opt,
+# descomente o bloco abaixo (e as receitas typesetting* do Justfile).
+# - name: TeX Live + LilyPond (fontes do TeX Live no fontconfig)
+#   ansible.builtin.import_playbook: playbooks/typesetting.yml
+#   tags: [typesetting, never]
